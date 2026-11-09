@@ -168,3 +168,18 @@ def test_tool_wrappers_have_schemas():
     assert names == {"list_tables", "describe_table", "get_column_values", "get_data_gaps", "run_sql"}
     run_sql_params = tools.run_sql_tool.params_json_schema["properties"]
     assert set(run_sql_params) == {"query", "purpose"}
+
+
+def test_costs_one_primary_estimate_per_project():
+    r = call(tools.run_sql, "SELECT count(*) FROM (SELECT project_uid FROM costs WHERE is_primary_estimate "
+                            "AND project_uid IS NOT NULL GROUP BY 1 HAVING count(*) > 1)", "t")
+    assert r["rows"] == [[0]]
+
+
+def test_poi_summary_active_mw_never_null():
+    assert call(tools.run_sql, "SELECT count(*) FROM poi_summary WHERE active_mw IS NULL", "t")["rows"] == [[0]]
+
+
+def test_time_to_operation_gets_timing_bias_caveat():
+    r = call(tools.run_sql, "SELECT region, median(days_ir_to_cod) FROM projects WHERE q_status='operational' GROUP BY 1", "t")
+    assert any("[timing bias]" in c for c in r["caveats"])

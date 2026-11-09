@@ -237,6 +237,24 @@ def run_sql(query: str, purpose: str) -> str:
     return text
 
 
+def fetch_rows(query: str, max_rows: int) -> tuple[list[str], list[list]]:
+    """Run a query with the same guardrails and timeout as run_sql, returning raw (cleaned) rows.
+    Used by the visual tools to rebuild tables and charts from a finding's verified SQL.
+    Raises ValueError with a readable reason."""
+    reason = guardrails.check_sql(query)
+    if reason:
+        raise ValueError(reason)
+    with cursor() as cur:
+        try:
+            rows = _run_with_timeout(cur, query, fetch=max_rows)
+            columns = [d[0] for d in cur.description or []]
+        except duckdb.InterruptException:
+            raise ValueError(f"query stopped after {QUERY_TIMEOUT_S}s") from None
+        except duckdb.Error as e:
+            raise ValueError(f"{type(e).__name__}: {e}") from None
+    return columns, [[_clean(v) for v in r] for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Agent tool wrappers
 # ---------------------------------------------------------------------------

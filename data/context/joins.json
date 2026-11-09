@@ -3,7 +3,7 @@
     "from": "costs.project_uid",
     "to": "projects.project_uid",
     "type": "many-to-one",
-    "note": "Project-level. 99-100% of ISO cost rows match; non-ISO rows match where the file lists a Queued Up ID."
+    "note": "Project-level. 99-100% of ISO cost rows match; non-ISO rows match where the file lists a Queued Up ID. A project can have several estimates: join with costs.is_primary_estimate = true to get one row per project."
   },
   {
     "from": "projects.fips_code",

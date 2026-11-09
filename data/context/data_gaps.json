@@ -15,6 +15,11 @@
     "gap": "Dates are incomplete. Always report how many projects had the date (e.g. 'based on N of M operational projects'). IA dates are especially thin in PJM (~3%), SPP (0%), NYISO and the Southeast."
   },
   {
+    "topic": "timing bias",
+    "applies_to": "projects.days_ir_to_cod, days_ia_to_cod, on_year",
+    "gap": "Time-to-operation figures only include projects that already reached operation. Many recent requests are still in the queue and will likely take longer, so these medians understate how long projects entering the queue today should expect to wait, especially for recent cohorts. Say so whenever reporting time to operation."
+  },
+  {
     "topic": "developer",
     "applies_to": "projects.developer",
     "gap": "Developer names are only populated in volume for ERCOT and NYISO (22% overall). Developer rankings elsewhere are not possible."
@@ -28,6 +33,11 @@
     "topic": "cost status",
     "applies_to": "costs.status_in_cost_file",
     "gap": "The cost files' status is a snapshot from when they were compiled. Join to projects for current status (q_status)."
+  },
+  {
+    "topic": "multiple estimates",
+    "applies_to": "costs.total_cost_per_kw_2024, poi_cost_per_kw_2024, network_cost_per_kw_2024, total_cost_musd_2024",
+    "gap": "Some projects have several cost estimates (per service type or per study). Filter is_primary_estimate = true for per-project statistics, or the project is counted more than once."
   },
   {
     "topic": "cost estimates",
@@ -52,7 +62,7 @@
   {
     "topic": "duplicate queue IDs",
     "applies_to": "projects.project_uid",
-    "gap": "135 records reuse an (entity, q_id) already in the file, often a sparser copy of the same project (e.g. Duke|1 and Duke|1#2). They are kept and flagged with shares_q_id_with_other_record. For project counts that must not double count, exclude rows where project_uid contains '#'."
+    "gap": "135 of 38,201 records reuse an (entity, q_id) already in the file, usually a sparser copy of the same project; their project_uid ends in '#2', '#3'. Including them changes totals by under 0.4%. Counts in this app include them, matching LBNL's published totals. No further investigation is needed."
   },
   {
     "topic": "date order",

@@ -392,8 +392,25 @@ def build_costs(projects: pd.DataFrame) -> pd.DataFrame:
     c["project_uid"] = [lookup.get(k) for k in keys]
     c["matched_to_queue"] = c["project_uid"].notna()
 
+    # 12 rows are exact duplicates in the source files. Drop them.
+    n_before = len(c)
+    c = c.drop_duplicates().reset_index(drop=True)
+    n_exact_dupes = n_before - len(c)
+
     c.insert(0, "cost_id", range(1, len(c) + 1))
-    cols = ["cost_id", "project_uid", "matched_to_queue", "entity", "cost_q_id", "source_file",
+
+    # Some projects have several estimates: the non-ISO file gives one per service type (ERIS and
+    # NRIS), and some projects were studied more than once. Flag one row per project, by a fixed rule:
+    # latest study, then NRIS over ERIS (the fuller service), then the last row. Per-project analyses
+    # filter on is_primary_estimate so no project is counted twice.
+    svc_rank = c["service_raw"].str.upper().str.contains("NRIS|CAPACITY|CNR", na=False).astype(int)
+    order = (c.assign(_svc=svc_rank, _d=pd.to_datetime(c["study_date"]))
+             .sort_values(["project_uid", "_d", "_svc", "cost_id"], na_position="first"))
+    last = order.drop_duplicates("project_uid", keep="last")["cost_id"]
+    c["is_primary_estimate"] = c["project_uid"].isna() | c["cost_id"].isin(last)
+    c["estimates_for_project"] = c.groupby("project_uid")["cost_id"].transform("size").where(c["project_uid"].notna(), 1)
+
+    cols = ["cost_id", "project_uid", "matched_to_queue", "is_primary_estimate", "estimates_for_project", "entity", "cost_q_id", "source_file",
             "transmission_owner", "state", "county", "county_norm", "fuel_raw", "fuel_group",
             "nameplate_mw", "service_raw", "study_type", "study_date", "study_year",
             "status_raw", "status_in_cost_file", "status_data_through", "queue_date_in_cost_file",
@@ -401,7 +418,8 @@ def build_costs(projects: pd.DataFrame) -> pd.DataFrame:
             "total_cost_musd_2024", "dollar_year_original", "poi_lat", "poi_lon", "voltage_kv"]
     c = c[cols]
     by_file = c.groupby("source_file")["matched_to_queue"].agg(["size", "sum"])
-    print("costs:", len(c), "rows; matched to queue by file:\n" + by_file.to_string())
+    print(f"costs: {n_before} rows, {n_exact_dupes} exact duplicates dropped, {len(c)} kept, "
+          f"{c['is_primary_estimate'].sum()} primary estimates; matched to queue by file:\n" + by_file.to_string())
     return c
 
 
@@ -528,7 +546,7 @@ SELECT entity, region, any_value(state) AS state,
        count(*) FILTER (WHERE q_status = 'active') AS requests_active,
        count(*) FILTER (WHERE q_status = 'withdrawn') AS requests_withdrawn,
        count(*) FILTER (WHERE q_status = 'operational') AS requests_operational,
-       sum(mw_total) FILTER (WHERE q_status = 'active') AS active_mw,
+       coalesce(sum(mw_total) FILTER (WHERE q_status = 'active'), 0) AS active_mw,
        round(count(*) FILTER (WHERE q_status = 'withdrawn') * 1.0 / count(*), 3) AS withdrawn_share,
        min(q_year) AS first_request_year, max(q_year) AS last_request_year
 FROM projects WHERE poi_name_clean IS NOT NULL
@@ -547,8 +565,8 @@ TABLE_DOCS = {
         "source": "LBNL & GridTracker, Queued Up 2026 Edition, CC BY 4.0",
     },
     "costs": {
-        "description": "Project-level interconnection cost estimates from LBNL's cost studies, unified across six files and converted to 2024 dollars. Each row is the cost from the most recent available interconnection study for that request.",
-        "grain": "one interconnection request's cost estimate", "primary_key": "cost_id",
+        "description": "Project-level interconnection cost estimates from LBNL's cost studies, unified across six files and converted to 2024 dollars. Some projects have more than one estimate (one per service type in the non-ISO file, or several studies). For per-project analysis, filter is_primary_estimate = true so each project counts once.",
+        "grain": "one cost estimate (per project, service type and study)", "primary_key": "cost_id",
         "source": "LBNL interconnection cost studies (MISO 2022, PJM 2023, SPP 2023, ISO-NE 2023, NYISO 2023, non-ISO 2026)",
     },
     "eia_generators": {
@@ -616,6 +634,8 @@ COLUMN_DOCS = {
         "cost_id": "Row ID.",
         "project_uid": "Link to projects.project_uid. Null when the cost row could not be matched.",
         "matched_to_queue": "True if linked to a projects row.",
+        "is_primary_estimate": "True for exactly one estimate per project (latest study, then NRIS over ERIS). Filter on it for per-project counts, averages and medians.",
+        "estimates_for_project": "How many estimates this project has in the table (1 for most).",
         "entity": "Queue entity (MISO, PJM, SPP, ISO-NE, NYISO, BPA, Duke, PacifiCorp).",
         "cost_q_id": "Queue ID as written in the cost file.",
         "source_file": "Which LBNL cost file the row came from.",
@@ -667,12 +687,16 @@ DATA_GAPS = [
      "gap": "Storage capacity for hybrids is often missing. LBNL imputes it in the published report but not in this file, so storage totals here are lower than the report's."},
     {"topic": "dates", "applies_to": "projects.on_date, wd_date, ia_date, on_year, wd_year, ia_year, days_*",
      "gap": "Dates are incomplete. Always report how many projects had the date (e.g. 'based on N of M operational projects'). IA dates are especially thin in PJM (~3%), SPP (0%), NYISO and the Southeast."},
+    {"topic": "timing bias", "applies_to": "projects.days_ir_to_cod, days_ia_to_cod, on_year",
+     "gap": "Time-to-operation figures only include projects that already reached operation. Many recent requests are still in the queue and will likely take longer, so these medians understate how long projects entering the queue today should expect to wait, especially for recent cohorts. Say so whenever reporting time to operation."},
     {"topic": "developer", "applies_to": "projects.developer",
      "gap": "Developer names are only populated in volume for ERCOT and NYISO (22% overall). Developer rankings elsewhere are not possible."},
     {"topic": "cost recency", "applies_to": "costs.poi_cost_per_kw_2024, network_cost_per_kw_2024, total_cost_per_kw_2024, total_cost_musd_2024",
      "gap": "Cost studies end in 2021 (MISO, ISO-NE, NYISO), 2022 (PJM), 2023 (SPP) and 2024 (non-ISO). There are no cost data for CAISO, ERCOT, or most non-ISO utilities. Costs for requests submitted after those dates are not covered."},
     {"topic": "cost status", "applies_to": "costs.status_in_cost_file",
      "gap": "The cost files' status is a snapshot from when they were compiled. Join to projects for current status (q_status)."},
+    {"topic": "multiple estimates", "applies_to": "costs.total_cost_per_kw_2024, poi_cost_per_kw_2024, network_cost_per_kw_2024, total_cost_musd_2024",
+     "gap": "Some projects have several cost estimates (per service type or per study). Filter is_primary_estimate = true for per-project statistics, or the project is counted more than once."},
     {"topic": "cost estimates", "applies_to": "costs.study_type, total_cost_per_kw_2024, total_cost_musd_2024",
      "gap": "Costs are study estimates, not final paid costs. Early-stage studies (Feasibility) are less reliable than Facility studies."},
     {"topic": "location", "applies_to": "projects",
@@ -682,7 +706,7 @@ DATA_GAPS = [
     {"topic": "POI names", "applies_to": "projects.poi_name, poi_name_clean, poi_summary.poi_name_norm, poi_name_example",
      "gap": "POI names are free text per operator. The same substation can appear under different spellings, so POI counts are approximate."},
     {"topic": "duplicate queue IDs", "applies_to": "projects.project_uid",
-     "gap": "135 records reuse an (entity, q_id) already in the file, often a sparser copy of the same project (e.g. Duke|1 and Duke|1#2). They are kept and flagged with shares_q_id_with_other_record. For project counts that must not double count, exclude rows where project_uid contains '#'."},
+     "gap": "135 of 38,201 records reuse an (entity, q_id) already in the file, usually a sparser copy of the same project; their project_uid ends in '#2', '#3'. Including them changes totals by under 0.4%. Counts in this app include them, matching LBNL's published totals. No further investigation is needed."},
     {"topic": "date order", "applies_to": "projects.days_ir_to_cod, days_ia_to_cod",
      "gap": "About 50 projects have an operation date before their queue date (usually uprates or re-filed requests). Their durations are set to null rather than negative."},
     {"topic": "negative capacity", "applies_to": "projects.mw_1",
@@ -697,7 +721,7 @@ DATA_GAPS = [
 
 JOINS = [
     {"from": "costs.project_uid", "to": "projects.project_uid", "type": "many-to-one",
-     "note": "Project-level. 99-100% of ISO cost rows match; non-ISO rows match where the file lists a Queued Up ID."},
+     "note": "Project-level. 99-100% of ISO cost rows match; non-ISO rows match where the file lists a Queued Up ID. A project can have several estimates: join with costs.is_primary_estimate = true to get one row per project."},
     {"from": "projects.fips_code", "to": "county_summary.fips_code", "type": "many-to-one", "note": "County level."},
     {"from": "eia_generators.fips_code", "to": "county_summary.fips_code", "type": "many-to-one", "note": "County level."},
     {"from": "projects.fips_code", "to": "eia_generators.fips_code", "type": "many-to-many",

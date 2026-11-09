@@ -65,14 +65,14 @@
             "SRP_ANPP": 45,
             "CLPT": 40,
             "WAPA-DSW": 34,
-            "SRP_PV-PC": 33,
             "SMUD": 33,
             "IID": 33,
+            "SRP_PV-PC": 33,
             "BHP": 26,
             "SEC": 25,
             "OUC": 13,
-            "JEA": 12,
             "WAPA-SN": 12,
+            "JEA": 12,
             "GrantPUD": 9,
             "CSU": 8,
             "N-C": 7,
@@ -363,30 +363,30 @@
             "Solar+Gas": 16,
             "Gas+Other": 12,
             "Hydro+Battery": 8,
-            "Hydrogen": 4,
             "Battery+Other Storage": 4,
+            "Hydrogen": 4,
             "Wind+Other": 4,
             "Gas+Coal": 3,
             "Other+Battery+Other Storage": 3,
             "Oil+Other": 2,
-            "Offshore Wind+Battery": 2,
             "Wind+Gas": 2,
-            "Other+Coal": 2,
-            "Solar+Wind+Other Storage": 2,
             "Solar+Battery+Other Storage": 2,
+            "Solar+Wind+Other Storage": 2,
+            "Offshore Wind+Battery": 2,
             "Solar+Other+Battery": 2,
-            "Gas+Battery+Other Storage": 1,
+            "Other+Coal": 2,
             "Geothermal+Other": 1,
-            "Geothermal+Battery": 1,
-            "Gas+Other Storage": 1,
-            "Gas+Battery+Diesel": 1,
             "Oil+Battery": 1,
-            "Solar+Hydro": 1,
-            "Oil+Coal": 1,
-            "Gas+Oil+Other": 1,
             "Solar+Geothermal": 1,
-            "Solar+Diesel": 1,
-            "Gas+Diesel": 1
+            "Gas+Oil+Other": 1,
+            "Geothermal+Battery": 1,
+            "Solar+Hydro": 1,
+            "Gas+Battery+Other Storage": 1,
+            "Gas+Battery+Diesel": 1,
+            "Gas+Diesel": 1,
+            "Gas+Other Storage": 1,
+            "Oil+Coal": 1,
+            "Solar+Diesel": 1
           }
         },
         {
@@ -655,20 +655,20 @@
       ]
     },
     "costs": {
-      "description": "Project-level interconnection cost estimates from LBNL's cost studies, unified across six files and converted to 2024 dollars. Each row is the cost from the most recent available interconnection study for that request.",
-      "grain": "one interconnection request's cost estimate",
+      "description": "Project-level interconnection cost estimates from LBNL's cost studies, unified across six files and converted to 2024 dollars. Some projects have more than one estimate (one per service type in the non-ISO file, or several studies). For per-project analysis, filter is_primary_estimate = true so each project counts once.",
+      "grain": "one cost estimate (per project, service type and study)",
       "primary_key": "cost_id",
       "source": "LBNL interconnection cost studies (MISO 2022, PJM 2023, SPP 2023, ISO-NE 2023, NYISO 2023, non-ISO 2026)",
-      "rows": 5486,
+      "rows": 5485,
       "columns": [
         {
           "name": "cost_id",
           "type": "BIGINT",
           "description": "Row ID.",
           "fill_pct": 100.0,
-          "distinct_values": 5486,
+          "distinct_values": 5485,
           "min": "1",
-          "max": "5486"
+          "max": "5485"
         },
         {
           "name": "project_uid",
@@ -685,8 +685,28 @@
           "distinct_values": 2,
           "values": {
             "True": 5164,
-            "False": 322
+            "False": 321
           }
+        },
+        {
+          "name": "is_primary_estimate",
+          "type": "BOOLEAN",
+          "description": "True for exactly one estimate per project (latest study, then NRIS over ERIS). Filter on it for per-project counts, averages and medians.",
+          "fill_pct": 100.0,
+          "distinct_values": 2,
+          "values": {
+            "True": 5054,
+            "False": 431
+          }
+        },
+        {
+          "name": "estimates_for_project",
+          "type": "DOUBLE",
+          "description": "How many estimates this project has in the table (1 for most).",
+          "fill_pct": 100.0,
+          "distinct_values": 3,
+          "min": "1.0",
+          "max": "3.0"
         },
         {
           "name": "entity",
@@ -699,7 +719,7 @@
             "PacifiCorp": 1117,
             "MISO": 922,
             "SPP": 845,
-            "Duke": 691,
+            "Duke": 690,
             "BPA": 296,
             "NYISO": 294,
             "ISO-NE": 194
@@ -719,7 +739,7 @@
           "fill_pct": 100.0,
           "distinct_values": 6,
           "values": {
-            "ba_costs_2024_clean_data.xlsx": 2104,
+            "ba_costs_2024_clean_data.xlsx": 2103,
             "pjm_costs_2022_clean_data.xlsx": 1127,
             "miso_costs_2021_clean_data.xlsx": 922,
             "spp_costs_2023_clean_data.xlsx": 845,
@@ -743,13 +763,13 @@
           "values": {
             "OR": 508,
             "UT": 471,
-            "NC": 356,
+            "NC": 355,
             "PA": 345,
             "NY": 288,
             "OK": 252,
             "VA": 239,
-            "FL": 204,
             "KS": 204,
+            "FL": 204,
             "WA": 176,
             "SC": 168,
             "MI": 157,
@@ -763,8 +783,8 @@
             "IL": 107,
             "WI": 103,
             "NE": 97,
-            "ID": 89,
             "LA": 89,
+            "ID": 89,
             "AR": 85,
             "MO": 75,
             "ND": 74,
@@ -777,17 +797,17 @@
             "MS": 36,
             "CT": 25,
             "NH": 21,
-            "WV": 19,
             "MT": 19,
+            "WV": 19,
             "DE": 17,
             "VT": 14,
             "RI": 9,
             "CA": 8,
             "CO": 4,
-            "TX/NM": 1,
             "DC": 1,
+            "NG+A+AF255": 1,
             "TN": 1,
-            "NG+A+AF255": 1
+            "TX/NM": 1
           }
         },
         {
@@ -817,7 +837,7 @@
             "Natural Gas": 303,
             "Solar Hybrid": 233,
             "Wind Land": 147,
-            "Gas": 98,
+            "Gas": 97,
             "Wind Onshore": 88,
             "Other": 65,
             "Hydro": 62,
@@ -828,18 +848,18 @@
             "Biogas": 17,
             "Hybrid": 16,
             "Geothermal": 14,
-            "Oil": 13,
             "Nuclear": 13,
+            "Oil": 13,
             "Offshore Wind": 6,
-            "Reciprocating Engine": 3,
             "Fuel Cell": 3,
             "Gas Hybrid": 3,
+            "Reciprocating Engine": 3,
             "Wind Hybrid Land": 2,
-            "Pumped Hydro Storage": 1,
             "Flywheel": 1,
+            "Pumped Hydro": 1,
             "Wind Hybrid Offshore": 1,
             "Diesel/Gas": 1,
-            "Pumped Hydro": 1
+            "Pumped Hydro Storage": 1
           }
         },
         {
@@ -852,7 +872,7 @@
             "Solar": 2684,
             "Wind": 1209,
             "Battery": 593,
-            "Gas": 405,
+            "Gas": 404,
             "Solar+Battery": 233,
             "Other": 68,
             "Hydro": 62,
@@ -862,8 +882,8 @@
             "Coal": 31,
             "Other Hybrid": 16,
             "Geothermal": 14,
-            "Oil": 13,
             "Nuclear": 13,
+            "Oil": 13,
             "Gas+Battery": 3,
             "Pumped Storage": 2,
             "Offshore Wind+Battery": 1
@@ -893,9 +913,9 @@
             "NR": 57,
             "NRIS Only": 12,
             "External NRIS": 5,
-            "FERC": 1,
             "NZIS": 1,
-            "MIS": 1
+            "MIS": 1,
+            "FERC": 1
           }
         },
         {
@@ -906,7 +926,7 @@
           "distinct_values": 19,
           "values": {
             "System Impact": 1366,
-            "Facility": 1006,
+            "Facility": 1005,
             "SIS": 856,
             "Feasibility": 551,
             "System Impact Study": 308,
@@ -921,8 +941,8 @@
             "Facilities": 22,
             "Fast Track": 17,
             "FeS": 5,
-            "WMPA": 3,
             "Facilities - Part 1": 3,
+            "WMPA": 3,
             "Optional": 1
           }
         },
@@ -954,7 +974,7 @@
             "Withdrawn": 2037,
             "Active": 1910,
             "Complete": 1096,
-            "Unknown": 223,
+            "Unknown": 222,
             "Operational": 172,
             "Suspended": 48
           }
@@ -969,7 +989,7 @@
             "withdrawn": 2037,
             "active": 1910,
             "operational": 1268,
-            "unknown": 223,
+            "unknown": 222,
             "suspended": 48
           }
         },
@@ -980,7 +1000,7 @@
           "fill_pct": 100.0,
           "distinct_values": 6,
           "values": {
-            "2024": 2104,
+            "2024": 2103,
             "2022": 1127,
             "2021": 922,
             "2023": 845,
@@ -992,7 +1012,7 @@
           "name": "queue_date_in_cost_file",
           "type": "DATE",
           "description": "Queue entry date as written in the cost file.",
-          "fill_pct": 95.1,
+          "fill_pct": 95.2,
           "distinct_values": 1450,
           "min": "1970-01-01",
           "max": "2023-11-16"
@@ -1055,7 +1075,7 @@
           "name": "poi_lon",
           "type": "DOUBLE",
           "description": "POI longitude (non-ISO file only).",
-          "fill_pct": 31.8,
+          "fill_pct": 31.7,
           "distinct_values": 726,
           "min": "-1250.8808",
           "max": "-76.803"
@@ -1159,8 +1179,8 @@
             "Offshore Wind Turbine": 18,
             "Solar Thermal without Energy Storage": 14,
             "Flywheels": 5,
-            "Coal Integrated Gasification Combined Cycle": 3,
             "Solar Thermal with Energy Storage": 3,
+            "Coal Integrated Gasification Combined Cycle": 3,
             "Natural Gas with Compressed Air Storage": 1
           }
         },
@@ -1448,8 +1468,8 @@
             "SD": 55,
             "CA": 53,
             "SC": 46,
-            "CO": 45,
             "MT": 45,
+            "CO": 45,
             "ND": 43,
             "ID": 42,
             "WV": 38,
@@ -1459,8 +1479,8 @@
             "UT": 25,
             "MD": 24,
             "NJ": 21,
-            "NV": 17,
             "WY": 17,
+            "NV": 17,
             "ME": 16,
             "MA": 13,
             "AZ": 13,
@@ -1672,26 +1692,26 @@
             "EPE": 49,
             "TEC": 44,
             "BHCT": 38,
-            "MPC": 25,
             "IID": 25,
+            "MPC": 25,
             "CLPT": 24,
             "SMUD": 22,
             "WAPA-DSW": 22,
             "SEC": 17,
             "BHP": 16,
             "PRPA": 13,
-            "JEA": 10,
             "WAPA-SN": 10,
+            "JEA": 10,
             "OUC": 9,
-            "GrantPUD": 6,
             "SRP_PV-PC": 6,
+            "GrantPUD": 6,
             "CSU": 5,
-            "N-C": 2,
             "WAPA-MPP": 2,
             "SRP_ANPP": 2,
+            "N-C": 2,
+            "CPUD": 1,
             "SRP_Gila": 1,
             "TPU": 1,
-            "CPUD": 1,
             "SRP_SWV": 1
           }
         },
@@ -1740,8 +1760,8 @@
             "MD": 442,
             "MA": 411,
             "UT": 410,
-            "NC": 391,
             "IA": 391,
+            "NC": 391,
             "FL": 371,
             "LA": 358,
             "MT": 351,
@@ -1770,8 +1790,8 @@
             "TN": 49,
             "MX": 13,
             "DC": 3,
-            "MB": 1,
-            "ON": 1
+            "ON": 1,
+            "MB": 1
           }
         },
         {
@@ -1828,9 +1848,9 @@
           "name": "active_mw",
           "type": "DOUBLE",
           "description": "",
-          "fill_pct": 26.1,
-          "distinct_values": 2302,
-          "min": "0.03",
+          "fill_pct": 100.0,
+          "distinct_values": 2303,
+          "min": "0.0",
           "max": "7658.0"
         },
         {
