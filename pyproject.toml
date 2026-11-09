@@ -1,0 +1,27 @@
+[project]
+name = "gridqueue"
+version = "0.1.0"
+description = "GridQueue: a multi-agent Text2SQL explorer for US power grid interconnection queues, costs and existing generators"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+# Runtime: what Cloud Run installs. The app only reads the prebuilt data/grid.duckdb.
+dependencies = [
+    "fastapi>=0.162",
+    "uvicorn>=0.54",
+    "openai-agents[litellm]>=0.24", # agent framework; LiteLLM routes calls to Gemini on Vertex AI
+    "google-cloud-aiplatform>=2.7", # Vertex AI auth (gcloud credentials locally, service account on Cloud Run)
+    "duckdb>=2.0",                  # must be >= the version that built data/grid.duckdb
+]
+
+[dependency-groups]
+# Offline build step only (build_db.py reads the raw Excel files). Not installed on Cloud Run.
+# Run with: uv run --group build build_db.py
+build = [
+    "pandas>=3.0",
+    "openpyxl>=3.1",
+]
+
+[tool.uv]
+# Use uv's own Python, never a system or Anaconda interpreter, so local runs match Cloud Run.
+python-preference = "only-managed"

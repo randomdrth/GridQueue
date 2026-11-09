@@ -1,0 +1,195 @@
+{
+  "column_fill_pct_by_region": [
+    {
+      "region": "CAISO",
+      "n": 2868,
+      "prop_date": 100.0,
+      "ia_date": 16.0,
+      "on_date": 9.0,
+      "wd_date": 75.0,
+      "ia_phase": 100.0,
+      "county": 85.0,
+      "poi_name": 100.0,
+      "developer": 0.0,
+      "service": 76.0,
+      "project_name": 100.0
+    },
+    {
+      "region": "ERCOT",
+      "n": 3757,
+      "prop_date": 94.0,
+      "ia_date": 32.0,
+      "on_date": 14.0,
+      "wd_date": 15.0,
+      "ia_phase": 96.0,
+      "county": 77.0,
+      "poi_name": 84.0,
+      "developer": 94.0,
+      "service": 0.0,
+      "project_name": 100.0
+    },
+    {
+      "region": "ISO-NE",
+      "n": 1282,
+      "prop_date": 100.0,
+      "ia_date": 13.0,
+      "on_date": 0.0,
+      "wd_date": 76.0,
+      "ia_phase": 50.0,
+      "county": 96.0,
+      "poi_name": 100.0,
+      "developer": 0.0,
+      "service": 70.0,
+      "project_name": 100.0
+    },
+    {
+      "region": "MISO",
+      "n": 5424,
+      "prop_date": 98.0,
+      "ia_date": 32.0,
+      "on_date": 10.0,
+      "wd_date": 57.0,
+      "ia_phase": 85.0,
+      "county": 99.0,
+      "poi_name": 100.0,
+      "developer": 1.0,
+      "service": 66.0,
+      "project_name": 3.0
+    },
+    {
+      "region": "NYISO",
+      "n": 1936,
+      "prop_date": 10.0,
+      "ia_date": 6.0,
+      "on_date": 4.0,
+      "wd_date": 39.0,
+      "ia_phase": 16.0,
+      "county": 90.0,
+      "poi_name": 100.0,
+      "developer": 100.0,
+      "service": 0.0,
+      "project_name": 100.0
+    },
+    {
+      "region": "PJM",
+      "n": 7666,
+      "prop_date": 97.0,
+      "ia_date": 3.0,
+      "on_date": 16.0,
+      "wd_date": 67.0,
+      "ia_phase": 100.0,
+      "county": 98.0,
+      "poi_name": 98.0,
+      "developer": 12.0,
+      "service": 100.0,
+      "project_name": 33.0
+    },
+    {
+      "region": "SPP",
+      "n": 2837,
+      "prop_date": 96.0,
+      "ia_date": 0.0,
+      "on_date": 20.0,
+      "wd_date": 47.0,
+      "ia_phase": 100.0,
+      "county": 99.0,
+      "poi_name": 86.0,
+      "developer": 0.0,
+      "service": 94.0,
+      "project_name": 0.0
+    },
+    {
+      "region": "Southeast",
+      "n": 4334,
+      "prop_date": 49.0,
+      "ia_date": 4.0,
+      "on_date": 8.0,
+      "wd_date": 22.0,
+      "ia_phase": 75.0,
+      "county": 97.0,
+      "poi_name": 74.0,
+      "developer": 22.0,
+      "service": 74.0,
+      "project_name": 5.0
+    },
+    {
+      "region": "West",
+      "n": 8097,
+      "prop_date": 93.0,
+      "ia_date": 9.0,
+      "on_date": 2.0,
+      "wd_date": 8.0,
+      "ia_phase": 65.0,
+      "county": 98.0,
+      "poi_name": 93.0,
+      "developer": 14.0,
+      "service": 89.0,
+      "project_name": 4.0
+    }
+  ],
+  "status_date_fill_by_region": [
+    {
+      "region": "CAISO",
+      "operational_n": 235,
+      "on_date_pct_of_operational": 97.0,
+      "withdrawn_n": 2200,
+      "wd_date_pct_of_withdrawn": 98.0
+    },
+    {
+      "region": "ERCOT",
+      "operational_n": 613,
+      "on_date_pct_of_operational": 85.0,
+      "withdrawn_n": 1158,
+      "wd_date_pct_of_withdrawn": 49.0
+    },
+    {
+      "region": "ISO-NE",
+      "operational_n": 228,
+      "on_date_pct_of_operational": 0.0,
+      "withdrawn_n": 982,
+      "wd_date_pct_of_withdrawn": 99.0
+    },
+    {
+      "region": "MISO",
+      "operational_n": 515,
+      "on_date_pct_of_operational": 97.0,
+      "withdrawn_n": 3263,
+      "wd_date_pct_of_withdrawn": 94.0
+    },
+    {
+      "region": "NYISO",
+      "operational_n": 215,
+      "on_date_pct_of_operational": 39.0,
+      "withdrawn_n": 1531,
+      "wd_date_pct_of_withdrawn": 49.0
+    },
+    {
+      "region": "PJM",
+      "operational_n": 1192,
+      "on_date_pct_of_operational": 99.0,
+      "withdrawn_n": 5226,
+      "wd_date_pct_of_withdrawn": 98.0
+    },
+    {
+      "region": "SPP",
+      "operational_n": 299,
+      "on_date_pct_of_operational": 96.0,
+      "withdrawn_n": 1846,
+      "wd_date_pct_of_withdrawn": 73.0
+    },
+    {
+      "region": "Southeast",
+      "operational_n": 529,
+      "on_date_pct_of_operational": 59.0,
+      "withdrawn_n": 2738,
+      "wd_date_pct_of_withdrawn": 35.0
+    },
+    {
+      "region": "West",
+      "operational_n": 963,
+      "on_date_pct_of_operational": 18.0,
+      "withdrawn_n": 5277,
+      "wd_date_pct_of_withdrawn": 12.0
+    }
+  ]
+}

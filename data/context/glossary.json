@@ -1,0 +1,15 @@
+{
+  "interconnection queue": "The line of generation projects waiting for grid operator studies and approval to connect to the transmission grid.",
+  "IR": "Interconnection request: when a project enters the queue (q_date).",
+  "IA": "Interconnection agreement: the signed contract to connect (ia_date). Usually the last major step before construction.",
+  "COD": "Commercial operation date: when the project started operating (on_date).",
+  "withdrawn": "The developer left the queue. Most requests end this way.",
+  "completion rate": "Share of requests (or MW) from a given entry-year cohort that reached operational status. Use old cohorts (e.g. entered 2000-2020) because recent requests have not had time to finish.",
+  "POI": "Point of interconnection: the substation or line where the project connects.",
+  "POI cost": "Cost of facilities to connect at the POI.",
+  "network upgrade cost": "Cost of upgrades deeper in the grid triggered by the project. The main driver of recent cost increases.",
+  "NRIS / ERIS": "Network vs. energy-only interconnection service. NRIS allows the plant to count toward capacity; ERIS is energy only.",
+  "ISO / RTO": "Independent system operator / regional transmission organization: the 7 market operators (CAISO, ERCOT, ISO-NE, MISO, NYISO, PJM, SPP).",
+  "hybrid": "A project combining resource types at one site, usually solar or wind plus battery.",
+  "FIPS": "5-digit county code: 2-digit state + 3-digit county."
+}

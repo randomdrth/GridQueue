@@ -1,0 +1,32 @@
+[
+  {
+    "from": "costs.project_uid",
+    "to": "projects.project_uid",
+    "type": "many-to-one",
+    "note": "Project-level. 99-100% of ISO cost rows match; non-ISO rows match where the file lists a Queued Up ID."
+  },
+  {
+    "from": "projects.fips_code",
+    "to": "county_summary.fips_code",
+    "type": "many-to-one",
+    "note": "County level."
+  },
+  {
+    "from": "eia_generators.fips_code",
+    "to": "county_summary.fips_code",
+    "type": "many-to-one",
+    "note": "County level."
+  },
+  {
+    "from": "projects.fips_code",
+    "to": "eia_generators.fips_code",
+    "type": "many-to-many",
+    "note": "County level only. There is no project-level link between queue requests and EIA generators; aggregate both sides by county before joining."
+  },
+  {
+    "from": "projects.(entity, upper(trim(poi_name_clean)))",
+    "to": "poi_summary.(entity, poi_name_norm)",
+    "type": "many-to-one",
+    "note": "POI level."
+  }
+]
