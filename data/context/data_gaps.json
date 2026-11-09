@@ -11,7 +11,7 @@
   },
   {
     "topic": "dates",
-    "applies_to": "projects.on_date, wd_date, ia_date",
+    "applies_to": "projects.on_date, wd_date, ia_date, on_year, wd_year, ia_year, days_*",
     "gap": "Dates are incomplete. Always report how many projects had the date (e.g. 'based on N of M operational projects'). IA dates are especially thin in PJM (~3%), SPP (0%), NYISO and the Southeast."
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "topic": "cost recency",
-    "applies_to": "costs",
+    "applies_to": "costs.poi_cost_per_kw_2024, network_cost_per_kw_2024, total_cost_per_kw_2024, total_cost_musd_2024",
     "gap": "Cost studies end in 2021 (MISO, ISO-NE, NYISO), 2022 (PJM), 2023 (SPP) and 2024 (non-ISO). There are no cost data for CAISO, ERCOT, or most non-ISO utilities. Costs for requests submitted after those dates are not covered."
   },
   {
@@ -31,7 +31,7 @@
   },
   {
     "topic": "cost estimates",
-    "applies_to": "costs",
+    "applies_to": "costs.study_type, total_cost_per_kw_2024, total_cost_musd_2024",
     "gap": "Costs are study estimates, not final paid costs. Early-stage studies (Feasibility) are less reliable than Facility studies."
   },
   {
@@ -41,12 +41,12 @@
   },
   {
     "topic": "county join",
-    "applies_to": "eia_generators.fips_code, county_summary",
+    "applies_to": "eia_generators.fips_code, county_summary.existing_mw, active_to_existing_ratio",
     "gap": "EIA counties are mapped to FIPS via the queue's county names. Counties with no queue project get no FIPS, so a small share of existing capacity is missing from county_summary."
   },
   {
     "topic": "POI names",
-    "applies_to": "projects.poi_name, poi_summary",
+    "applies_to": "projects.poi_name, poi_name_clean, poi_summary.poi_name_norm, poi_name_example",
     "gap": "POI names are free text per operator. The same substation can appear under different spellings, so POI counts are approximate."
   },
   {
@@ -56,17 +56,17 @@
   },
   {
     "topic": "date order",
-    "applies_to": "projects.days_*",
+    "applies_to": "projects.days_ir_to_cod, days_ia_to_cod",
     "gap": "About 50 projects have an operation date before their queue date (usually uprates or re-filed requests). Their durations are set to null rather than negative."
   },
   {
     "topic": "negative capacity",
-    "applies_to": "projects.mw_1, mw_total",
+    "applies_to": "projects.mw_1",
     "gap": "16 requests list negative MW in the source (likely derates of existing plants). mw_1 keeps the raw value; mw_total is null for them and mw_note explains why."
   },
   {
     "topic": "ISO-NE timing",
-    "applies_to": "projects.on_date",
+    "applies_to": "projects.on_date, days_ir_to_cod, days_ia_to_cod",
     "gap": "ISO-NE has no operation dates in this file, so time-to-operation cannot be computed for ISO-NE."
   },
   {

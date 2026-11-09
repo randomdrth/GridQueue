@@ -21,7 +21,14 @@ build = [
     "pandas>=3.0",
     "openpyxl>=3.1",
 ]
+dev = [
+    "pytest>=9.2.0",
+]
 
 [tool.uv]
 # Use uv's own Python, never a system or Anaconda interpreter, so local runs match Cloud Run.
 python-preference = "only-managed"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
