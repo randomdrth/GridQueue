@@ -57,7 +57,7 @@ h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; letter-spacing: 
 .mark svg { width: 30px; height: 18px; }
 .mark span { font: 600 1.3rem/1 var(--display); }
 .bar-actions { margin-left: auto; display: flex; gap: 0.4rem; }
-.quiet { background: none; border: 1px solid transparent; border-radius: 6px; padding: 0.35rem 0.7rem; cursor: pointer; color: var(--ink-2); font-size: 0.9rem; text-decoration: none; line-height: 1.4; }
+.quiet { background: none; border: 1px solid transparent; border-radius: 6px; padding: 0.35rem 0.7rem; cursor: pointer; color: var(--ink-2); font-size: 0.9rem; text-decoration: none; line-height: 1.4; white-space: nowrap; }
 .quiet:hover { border-color: var(--line); color: var(--ink); }
 .quiet[aria-current="page"] { border-color: var(--line); background: var(--sheet); color: var(--ink); }
 
@@ -260,6 +260,11 @@ textarea::placeholder { color: var(--ink-3); }
 
 @media (max-width: 760px) {
   :root { --gutter: 1rem; }
+  .bar-inner { gap: 0.5rem; }
+  .quiet { padding: 0.3rem 0.45rem; }
+  /* the diagram scales down with the column, so its labels need a larger size to stay readable */
+  .sld text { font-size: 30px; }
+  .sld text.wire-label { font-size: 24px; }
   .keys ul { columns: 2; }
   .cols4 { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
   .pipeline-svg { margin-bottom: 1rem; }
@@ -305,7 +310,7 @@ textarea::placeholder { color: var(--ink-3); }
 
     <div class="try">
       <h2>Try a question</h2>
-      <p>Answers take 30 to 90 seconds. Follow up in plain words, like "now just Texas", or click a bar or county to ask about it.</p>
+      <p>Answers take 30 seconds to 2 minutes. Follow up in plain words, like "now just Texas", or click a bar or county to ask about it.</p>
       <div class="chips" id="chips"></div>
       <p class="limits">It can't answer questions about electricity demand, including data centers, interconnection costs in CAISO or ERCOT, or final costs. <a href="#limits">Why</a></p>
     </div>
@@ -435,12 +440,10 @@ textarea::placeholder { color: var(--ink-3); }
 // Content
 // ---------------------------------------------------------------------------
 const EXAMPLES = [
-  { topic: "Queue size", q: "How much capacity is active in each region's queue, by resource type?" },
-  { topic: "Outcomes", q: "What share of solar, wind, battery and gas projects that entered interconnection queues between 2000 and 2020 actually got built?" },
+  { topic: "Trends", q: "How many new interconnection requests were filed each year since 2010, by resource type?" },
+  { topic: "Siting", q: "Which counties have the most active queue capacity relative to the generation already operating there?" },
   { topic: "Costs", q: "Do projects that withdrew face higher interconnection costs than projects that got built? Compare by region." },
   { topic: "Wait times", q: "How has the time to commercial operation changed over the years in ERCOT vs. PJM?" },
-  { topic: "Siting", q: "Which counties have the most active queue capacity relative to the generation already operating there?" },
-  { topic: "Out of scope", q: "How much data center demand is in the interconnection queue?", limit: true },
 ];
 
 const STAGE_CAPTION = {
@@ -569,7 +572,7 @@ class Progress {
     this.clock = el("span", { class: "clock", text: "0:00" });
     this.diagramHolder = el("div");
     this.log = el("ol", { class: "log", "aria-label": "Steps so far" });
-    this.hint = el("p", { class: "hint", text: "Usually 30 to 90 seconds." });
+    this.hint = el("p", { class: "hint", text: "Usually 30 seconds to 2 minutes." });
     this.root.append(el("div", { class: "progress-head" }, this.caption, this.clock), this.diagramHolder, this.hint, this.log);
     container.append(this.root);
     this.workers = 1;
@@ -713,17 +716,28 @@ function askAbout(datum, kind) {
   const field = $("#field"); field.classList.remove("flash"); void field.offsetWidth; if (!reducedMotion) field.classList.add("flash");
 }
 
+const NARROW = 560;
+
 async function embed(box, spec, kind) {
+  // Remember what is drawn, so a resize across the phone width can redraw it with the right layout.
+  if (!box.dataset.watching) {
+    box.dataset.watching = "1";
+    new ResizeObserver(() => {
+      const narrow = box.clientWidth < NARROW;
+      if (box.drawn && narrow !== box.drawn.narrow) embed(box, box.drawn.spec, box.drawn.kind);
+    }).observe(box);
+  }
+  box.drawn = { spec, kind, narrow: box.clientWidth < NARROW };
   box.textContent = "";
   try {
     await document.fonts.ready;
-    const narrow = box.clientWidth < 560;
+    const narrow = box.clientWidth < NARROW;
     if (kind === "map") {
       // A projection fitted to "container" width can render tiny on phones; give it real pixels.
       const w = Math.max(260, box.clientWidth - 24);
       spec = { ...spec, width: w, height: Math.min(420, Math.round(w * 0.62)) };
     }
-    const config = narrow ? { ...VEGA_CONFIG, legend: { ...VEGA_CONFIG.legend, orient: "bottom" } } : VEGA_CONFIG;
+    const config = narrow ? { ...VEGA_CONFIG, legend: { ...VEGA_CONFIG.legend, orient: "bottom", direction: "horizontal", columns: 2, labelLimit: 150 } } : VEGA_CONFIG;
     const result = await vegaEmbed(box, spec, {
       config, renderer: "svg",
       actions: { export: true, source: false, compiled: false, editor: false },
@@ -824,6 +838,8 @@ function badges(meta, toolCalls) {
   const out = [];
   if (!meta || meta.error) return out;
   const v = meta.verdict;
+  if (meta.action === "out_of_scope") out.push(["warn", "Outside what the data covers"]);
+  if (meta.action === "clarify") out.push(["plain", "Needs one more detail"]);
   if (meta.action === "answer" || v) {
     if (v === "ok") out.push(["good", "Verified by a second agent"]);
     else if (v === "needs_more") out.push(["good", "Verified after a follow-up check"]);

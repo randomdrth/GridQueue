@@ -259,7 +259,8 @@ def test_known_categories_get_fixed_colours():
     s = V.semantic_scale(["Solar", "wind", "Battery"])
     assert s == {"domain": ["Solar", "wind", "Battery"], "range": ["#D4A017", "#2A9D8F", "#7B5EA7"]}
     assert V.semantic_scale(["PJM", "ERCOT"])["range"] == ["#1C5D99", "#B3392F"]
-    assert V.semantic_scale(["withdrawn", "operational"])["range"] == ["#A3AEB9", "#1C5D99"]
+    assert V.semantic_scale(["withdrawn", "operational"]) == {"domain": ["operational", "withdrawn"],
+                                                               "range": ["#1C5D99", "#A3AEB9"]}
     assert V.semantic_scale(["PJM", "Solar"]) is None          # mixed: fall back to the default palette
     assert V.semantic_scale(["Operational projects %"]) is None
 
@@ -274,7 +275,7 @@ def test_single_series_bars_colour_each_resource():
 
 def test_line_series_use_region_colours():
     data = [{"x": y, "value": 1, "series": r} for y in (2020, 2021) for r in ("ERCOT", "PJM")]
-    assert V.line_spec("t", "Year", "Days", data, multi=True)["encoding"]["color"]["scale"]["range"] == ["#B3392F", "#1C5D99"]
+    assert V.line_spec("t", "Year", "Days", data, multi=True)["encoding"]["color"]["scale"]["range"] == ["#1C5D99", "#B3392F"]
 
 
 def test_page_palette_matches_charts():
@@ -283,3 +284,42 @@ def test_page_palette_matches_charts():
     html = Path(__file__).parent.parent.joinpath("index.html").read_text()
     page = json.loads(re.search(r'<script id="palette" type="application/json">(.*?)</script>', html, re.S).group(1))
     assert page == {"resource": V.RESOURCE_COLORS, "region": V.REGION_COLORS, "status": V.STATUS_COLORS}
+
+
+# --- stacked bars (live test: active MW by region and resource type had 15 series) ---------
+
+def test_stacked_bar_splits_totals_by_resource(ctx):
+    sql = ("SELECT region, type_group, SUM(mw_total) AS mw FROM projects WHERE q_status = 'active' "
+           "GROUP BY 1, 2")
+    ctx.findings[9] = finding(9, sql)
+    assert V._chart(ctx, 9, "stacked_bar", "region", ["mw"], "type_group", "Active MW", "Region", "MW").startswith("ok")
+    spec = ctx.visuals[-1]["spec"]
+    enc = spec["encoding"]
+    assert "xOffset" not in enc and "yOffset" not in enc
+    assert enc["color"]["scale"]["range"][enc["color"]["scale"]["domain"].index("Solar")] == "#D4A017"
+    cats = (enc["y"] if enc["y"]["field"] == "category" else enc["x"])["sort"]
+    totals = {}
+    for d in spec["data"]["values"]:
+        totals[d["category"]] = totals.get(d["category"], 0) + d["value"]
+    assert cats == sorted(totals, key=lambda c: -totals[c])   # biggest queue first
+
+
+def test_grouped_bar_with_too_many_series_points_to_stacked(ctx):
+    sql = "SELECT region, type_group, SUM(mw_total) AS mw FROM projects WHERE q_status = 'active' GROUP BY 1, 2"
+    ctx.findings[9] = finding(9, sql)
+    out = V._safe(V._chart, ctx, 9, "bar", "region", ["mw"], "type_group", "t", "x", "y")
+    assert out.startswith("Error") and "stacked_bar" in out
+
+
+def test_stacked_bar_needs_a_series(ctx):
+    assert "needs a series" in V._safe(V._chart, ctx, 1, "stacked_bar", "region", ["median_cost"], "", "t", "x", "y")
+
+
+def test_stacked_segments_follow_the_palette_order(ctx):
+    ctx.findings[9] = finding(9, "SELECT region, type_group, SUM(mw_total) AS mw FROM projects "
+                                 "WHERE q_status = 'active' GROUP BY 1, 2")
+    V._chart(ctx, 9, "stacked_bar", "region", ["mw"], "type_group", "t", "Region", "MW")
+    enc = ctx.visuals[-1]["spec"]["encoding"]
+    domain = enc["color"]["scale"]["domain"]
+    assert domain.index("Solar") < domain.index("Solar+Battery") < domain.index("Wind") < domain.index("Battery")
+    assert enc["order"]["field"] == "stack_rank" and enc["color"]["sort"] == domain

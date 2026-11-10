@@ -15,6 +15,7 @@ specs to the tool call in /chat's tool_calls, where the page finds and draws the
 
 import math
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -32,6 +33,7 @@ MAX_BAR_CATEGORIES = 40
 MAX_LINE_POINTS = 600
 MAX_SCATTER_POINTS = 3_000
 MAX_SERIES = 6
+MAX_STACK_SERIES = 20        # a stacked bar shows parts of a whole, so more parts stay readable
 MAX_MAP_METRICS = 3          # the chosen column plus up to 2 others the page can switch to
 _NOT_A_METRIC = re.compile(r"fips|year|lat|lon|(^|_)id$", re.IGNORECASE)
 
@@ -201,9 +203,12 @@ def semantic_scale(values) -> dict | None:
     if not vals:
         return None
     for palette in _PALETTES:
-        lookup = {k.lower(): c for k, c in palette.items()}
-        if all(str(v).strip().lower() in lookup for v in vals):
-            return {"domain": vals, "range": [lookup[str(v).strip().lower()] for v in vals]}
+        order = {k.lower(): i for i, k in enumerate(palette)}
+        if all(str(v).strip().lower() in order for v in vals):
+            # The palette's order, so related types sit together (Solar, Solar+Battery, Wind, ...).
+            vals.sort(key=lambda v: order[str(v).strip().lower()])
+            colors = list(palette.values())
+            return {"domain": vals, "range": [colors[order[str(v).strip().lower()]] for v in vals]}
     return None
 
 
@@ -213,10 +218,17 @@ def _series_color(data: list[dict]) -> dict:
     return {**enc, "scale": scale} if scale else enc
 
 
-def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bool, percent: bool = False) -> dict:
+def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bool, percent: bool = False,
+             stacked: bool = False) -> dict:
     """data: [{category, value, series}]. Horizontal when there are many or long labels.
-    Legend click highlights a series; tooltips show exact values."""
+    stacked: each bar is a total split into its series (e.g. MW by region, split by resource type),
+    with bars ordered by total. Legend click highlights a series; tooltips show exact values."""
     categories = list(dict.fromkeys(d["category"] for d in data))
+    if stacked:
+        totals = defaultdict(float)
+        for d in data:
+            totals[d["category"]] += d["value"] if _is_number(d["value"]) else 0
+        categories.sort(key=lambda c: -totals[c])
     horizontal = len(categories) > 8 or max(len(str(c)) for c in categories) > 14
     cat = {"field": "category", "type": "nominal", "sort": categories, "title": x_label,
            **({} if horizontal else {"axis": {"labelAngle": 0}})}
@@ -226,8 +238,17 @@ def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bo
     enc = {"x": val, "y": cat} if horizontal else {"x": cat, "y": val}
     spec = _base(title, data, height=max(240, 22 * len(categories)) if horizontal else 320)
     if multi:
-        enc["yOffset" if horizontal else "xOffset"] = {"field": "series"}
+        if not stacked:
+            enc["yOffset" if horizontal else "xOffset"] = {"field": "series"}
         enc["color"] = _series_color(data)
+        if stacked:
+            # Segments stack in the legend's order, so the colours read the same way in both.
+            domain = (enc["color"].get("scale") or {}).get("domain") or list(dict.fromkeys(d["series"] for d in data))
+            rank = {v: i for i, v in enumerate(domain)}
+            for d in data:
+                d["stack_rank"] = rank.get(d["series"], len(rank))
+            enc["order"] = {"field": "stack_rank", "type": "quantitative"}
+            enc["color"]["sort"] = domain
         enc["opacity"] = {"condition": {"param": "pick", "value": 1}, "value": 0.25}
         tooltip.insert(1, {"field": "series", "title": "Series"})
         spec["params"] = [{"name": "pick", "select": {"type": "point", "fields": ["series"]}, "bind": "legend"}]
@@ -236,7 +257,7 @@ def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bo
         if scale:
             enc["color"] = {"field": "category", "type": "nominal", "scale": scale, "legend": None}
     enc["tooltip"] = tooltip
-    spec.update(mark={"type": "bar", "cornerRadiusEnd": 2}, encoding=enc)
+    spec.update(mark={"type": "bar"} if stacked else {"type": "bar", "cornerRadiusEnd": 2}, encoding=enc)
     return spec
 
 
@@ -382,20 +403,26 @@ def _chart(ctx: WriterContext, finding_id: int, chart_type: str, x: str, y: list
         for yi in yis:
             if r[yi] is None or r[xi] is None:
                 continue
-            data.append({"x" if chart_type != "bar" else "category": r[xi], "value": r[yi],
+            data.append({"category" if chart_type in ("bar", "stacked_bar") else "x": r[xi], "value": r[yi],
                          "series": (str(r[si]) if si is not None else _pretty(cols[yi])),
                          "label": str(r[xi])})
     multi = len(yis) > 1 or si is not None
     percent = all(is_fraction_column(cols[yi], [r[yi] for r in rows]) for yi in yis)
     n_series = len({d["series"] for d in data})
-    if n_series > MAX_SERIES:
-        raise ValueError(f"{n_series} series is too many to read; use at most {MAX_SERIES}.")
-    if chart_type == "bar":
+    stacked = chart_type == "stacked_bar"
+    if stacked and not multi:
+        raise ValueError("A stacked bar needs a series column (the parts of each bar). Use chart_type bar.")
+    limit = MAX_STACK_SERIES if stacked else MAX_SERIES
+    if n_series > limit:
+        hint = (" If the series are parts of a total (e.g. resource types within each region), use "
+                "chart_type stacked_bar." if not stacked and n_series <= MAX_STACK_SERIES else "")
+        raise ValueError(f"{n_series} series is too many to read; use at most {limit}.{hint}")
+    if chart_type in ("bar", "stacked_bar"):
         n = len({d["category"] for d in data})
         if n > MAX_BAR_CATEGORIES:
             raise ValueError(f"{n} categories is too many for a bar chart (max {MAX_BAR_CATEGORIES}). "
                              "Use a table, or a finding with fewer rows.")
-        spec = bar_spec(title, x_label, y_label, data, multi, percent)
+        spec = bar_spec(title, x_label, y_label, data, multi, percent, stacked=stacked)
     elif chart_type == "line":
         if len(data) > MAX_LINE_POINTS:
             raise ValueError(f"{len(data)} points is too many for a line chart (max {MAX_LINE_POINTS}).")
@@ -474,15 +501,18 @@ def show_table(ctx: RunContextWrapper[WriterContext], finding_id: int, columns: 
 
 
 @function_tool
-def show_chart(ctx: RunContextWrapper[WriterContext], finding_id: int, chart_type: Literal["bar", "line", "scatter"],
+def show_chart(ctx: RunContextWrapper[WriterContext], finding_id: int,
+               chart_type: Literal["bar", "stacked_bar", "line", "scatter"],
                x: str, y: list[str], series: str, title: str, x_label: str, y_label: str) -> str:
     """Show an interactive chart built from a finding's verified query (hover for exact values).
 
-    bar: compare categories (up to 40). line: a trend over years. scatter: two numeric measures.
+    bar: compare categories (up to 40). stacked_bar: totals split into parts, e.g. active MW by region
+    split by resource type (x = region, series = type). line: a trend over years. scatter: two
+    numeric measures.
 
     Args:
         finding_id: The finding to draw from.
-        chart_type: bar, line or scatter.
+        chart_type: bar, stacked_bar, line or scatter.
         x: Result column for categories (bar) or the x axis (line, scatter).
         y: One or more numeric result columns. Several columns become several series.
         series: Optional result column that splits rows into series (e.g. q_status), or ''.

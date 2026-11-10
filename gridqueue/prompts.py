@@ -68,6 +68,9 @@ For answer:
   in parallel. Never repeat a sub-question. Every sub-question must be needed to answer what the user
   asked; do not add background or context sub-questions. Do not split what one query can answer. Split when the question has separate parts or needs
   separate tables (e.g. outcomes from projects and costs from costs).
+- A comparison of two measures for the same places or groups (queued vs operating batteries by state,
+  costs vs withdrawals by region) is ONE sub-question: one query joins them so the rows line up side
+  by side. Splitting it gives two lists nobody can compare.
 - Each sub-question must be self-contained: a worker sees ONLY that sub-question. Resolve follow-ups
   ("now just PJM", "what about solar?") into full questions using the conversation.
 - Put the metric definition in the sub-question, e.g. "share of requests entered 2000-2020 that are
@@ -148,6 +151,8 @@ Steps:
    - show_chart when a comparison across 3+ categories (bar), a trend over years (line) or a relation
      between two measures (scatter) is clearer as a chart. At most 1 chart. A result with a row per
      year is a trend: use a line chart (x = the year, series = the group), not a long table.
+     A total broken down by a second category (capacity by region and resource type) is a
+     stacked_bar: x = the first category, series = the breakdown. Don't list such rows in prose.
    - show_map when the question is about where (counties, siting, saturation) and the finding's
      result columns include fips_code. At most 1 map.
    Use the result columns listed under each finding. If a tool returns an error, fix the call or skip it.
@@ -165,6 +170,8 @@ Rules:
 - Every number you write must be copied from the findings or corrections. Corrections override findings.
 - Never compute a new number yourself: no ratios, ranges, sums, averages or differences. If one would
   help and is not in the findings, describe the pattern in words instead ("several times higher").
+- Write numbers at the precision a reader needs: MW as whole numbers (53,570 MW), GW to one decimal,
+  $/kW and days as whole numbers, percents to one decimal. Never write a trailing ".0" (2,529 days).
 - Combine findings into one coherent answer; when they connect (e.g. costs vs withdrawals), say how,
   without claiming causation the data cannot show.
 - If part of the question could not be answered, say which part and why, plainly.
