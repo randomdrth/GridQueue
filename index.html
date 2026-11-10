@@ -1,157 +1,1063 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>GridQueue</title>
-        <!-- Test page: renders answers, tables, charts and maps. The real frontend comes later. -->
-        <script src="/static/vendor/vega.min.js"></script>
-        <script src="/static/vendor/vega-lite.min.js"></script>
-        <script src="/static/vendor/vega-embed.min.js"></script>
-        <script src="/static/vendor/marked.umd.js"></script>
-        <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: system-ui, sans-serif; display: flex; justify-content: center; padding: 2rem 1rem; }
-            #container { width: 100%; max-width: 980px; display: flex; flex-direction: column; border: 1px solid #e0e0e0; }
-            #messages { overflow-y: auto; padding: 1.5rem 2rem; display: flex; flex-direction: column; gap: 1.25rem;
-                        min-height: 450px; max-height: 78vh; }
-            .msg { line-height: 1.55; max-width: 100%; }
-            .msg.user { align-self: flex-end; text-align: right; max-width: 80%; }
-            .msg .role { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 0.25rem; }
-            .msg.loading .content { color: #999; }
-            .content p, .content ul { margin: 0.5rem 0; } .content ul { padding-left: 1.25rem; }
-            .content table { border-collapse: collapse; margin: 0.75rem 0 0.25rem; font-size: 0.85rem; }
-            .content th, .content td { border-bottom: 1px solid #eee; padding: 0.3rem 0.6rem; }
-            .content th { cursor: pointer; background: #fafafa; text-align: left; }
-            .viz { width: 100%; margin: 0.75rem 0; }
-            .tools { font-size: 0.75rem; margin-bottom: 0.75rem; display: flex; gap: 0.75rem; }
-            .tools a { color: #b45309; cursor: pointer; text-decoration: underline; }
-            .sql { display: none; font-family: ui-monospace, monospace; font-size: 0.75rem; background: #f5f5f5;
-                   padding: 0.5rem; white-space: pre-wrap; margin-bottom: 0.75rem; }
-            #input-area { display: flex; gap: 1rem; padding: 1.25rem; border-top: 1px solid #e0e0e0; }
-            #user-input { flex: 1; padding: 0.75rem 0; border: none; border-bottom: 1px solid #e0e0e0; font-size: 1rem; outline: none; }
-            button { padding: 0.75rem 1.5rem; background: #000; color: #fff; border: none; font-size: 0.75rem;
-                     text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
-            button:disabled { opacity: 0.3; }
-            details.tool { font-family: ui-monospace, monospace; font-size: 0.72rem; color: #555; background: #f7f7f7;
-                           border-left: 3px solid #f59e0b; padding: 0.35rem 0.75rem; margin: 0.15rem 0; white-space: pre-wrap; word-break: break-word; }
-            details.tool summary { cursor: pointer; }
-            .tool .agent { color: #b45309; text-transform: uppercase; letter-spacing: 0.05em; }
-        </style>
-    </head>
-    <body>
-        <div id="container">
-            <div id="messages"></div>
-            <div id="input-area">
-                <input type="text" id="user-input" placeholder="Ask about US grid interconnection queues..." autocomplete="off" />
-                <button id="send-btn">Send</button>
-            </div>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GridQueue: ask the US interconnection queue</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2430'/%3E%3Cpath d='M6 16h7c3 0 3-6 6-6h7M13 16c3 0 3 6 6 6h7' fill='none' stroke='%23F3F5F4' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='26' cy='16' r='3' fill='%23D9730D'/%3E%3C/svg%3E" />
+<meta name="description" content="Ask questions about the US grid interconnection queue. Answers come from SQL on public LBNL and EIA data, with every query shown." />
+<script src="/static/vendor/vega.min.js"></script>
+<script src="/static/vendor/vega-lite.min.js"></script>
+<script src="/static/vendor/vega-embed.min.js"></script>
+<script src="/static/vendor/marked.umd.js"></script>
+<style>
+@font-face { font-family: "Public Sans"; font-weight: 400; font-display: swap; src: url(/static/vendor/fonts/public-sans-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 500; font-display: swap; src: url(/static/vendor/fonts/public-sans-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 600; font-display: swap; src: url(/static/vendor/fonts/public-sans-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Public Sans"; font-weight: 700; font-display: swap; src: url(/static/vendor/fonts/public-sans-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 500; font-display: swap; src: url(/static/vendor/fonts/barlow-semi-condensed-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 600; font-display: swap; src: url(/static/vendor/fonts/barlow-semi-condensed-latin-600-normal.woff2) format("woff2"); }
+
+:root {
+  --paper: #F3F5F4;
+  --sheet: #FFFFFF;
+  --ink: #1A2430;
+  --ink-2: #4A5866;
+  --ink-3: #6F7C89;
+  --line: #CDD4DA;
+  --line-soft: #E3E8EC;
+  --conductor: #1C5D99;
+  --conductor-soft: #E4EDF6;
+  --energized: #D9730D;
+  --energized-soft: #FBEBDA;
+  --good: #2E7D4F;
+  --good-soft: #E2F1E8;
+  --bad: #B3392F;
+  --bad-soft: #F8E3E1;
+  --sans: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Barlow Semi Condensed", "Arial Narrow", var(--sans);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --col: 54rem;      /* page column: header, visuals, diagrams */
+  --measure: 42rem;  /* running text */
+  --gutter: 1.25rem;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 4.5rem; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.6 var(--sans); }
+a { color: var(--conductor); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--conductor); outline-offset: 2px; border-radius: 3px; }
+button, select, textarea { font: inherit; color: inherit; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; letter-spacing: 0; }
+
+/* ---------- top bar ---------- */
+.bar { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: 1px solid var(--line); }
+.bar-inner { max-width: var(--col); margin: 0 auto; padding: 0.7rem var(--gutter); display: flex; align-items: center; gap: 1rem; }
+.mark { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; color: var(--ink); }
+.mark svg { width: 30px; height: 18px; }
+.mark span { font: 600 1.3rem/1 var(--display); }
+.bar-actions { margin-left: auto; display: flex; gap: 0.4rem; }
+.quiet { background: none; border: 1px solid transparent; border-radius: 6px; padding: 0.35rem 0.7rem; cursor: pointer; color: var(--ink-2); font-size: 0.9rem; text-decoration: none; line-height: 1.4; }
+.quiet:hover { border-color: var(--line); color: var(--ink); }
+.quiet[aria-current="page"] { border-color: var(--line); background: var(--sheet); color: var(--ink); }
+
+main { max-width: var(--col); margin: 0 auto; padding: 0 var(--gutter) 11rem; }
+
+/* ---------- views ---------- */
+.how { display: none; }
+body.view-how .how { display: block; }
+body.view-how .intro, body.view-how #conversation { display: none; }
+body.chatting .intro { display: none; }
+
+/* ---------- shared type ---------- */
+.intro, .how { padding-top: 2.75rem; }
+.intro h1, .how h1 { font-size: clamp(2rem, 5vw, 2.85rem); line-height: 1.05; margin: 0 0 0.9rem; max-width: 24ch; }
+.how h1 { max-width: 30ch; }
+.lede { font-size: 1.08rem; color: var(--ink-2); max-width: var(--measure); margin: 0 0 2.25rem; }
+.note { font-size: 0.88rem; color: var(--ink-2); max-width: var(--measure); margin: 0.9rem 0 0; }
+
+/* ---------- pipeline diagram + 4 aligned captions ---------- */
+/* The SVG and the caption grid share the column width; nodes sit at the centre of each quarter. */
+.pipeline { margin: 0 0 2.5rem; }
+.pipeline-svg { margin: 0 0 0.6rem; }
+.cols4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 1rem; }
+.cols4 > div { font-size: 0.86rem; color: var(--ink-2); line-height: 1.45; text-align: center; padding: 0 0.25rem; }
+.cols4 b { display: block; font: 600 1.02rem/1.25 var(--display); color: var(--ink); margin-bottom: 0.15rem; }
+.pipeline figcaption { margin-top: 1.1rem; font-size: 0.9rem; text-align: center; }
+
+.sld { width: 100%; height: auto; display: block; overflow: visible; }
+.sld .wire { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; transition: stroke 0.35s; }
+.sld .node { fill: var(--sheet); stroke: var(--line); stroke-width: 3; transition: fill 0.35s, stroke 0.35s; }
+.sld .feeder-node { fill: var(--sheet); stroke: var(--line); stroke-width: 2.5; transition: fill 0.35s, stroke 0.35s; }
+.sld .ring { fill: none; stroke: var(--energized); stroke-width: 2; opacity: 0; }
+.sld text { font: 600 15px var(--display); fill: var(--ink-3); transition: fill 0.35s; }
+.sld text.wire-label { font: 500 13px var(--sans); fill: var(--ink-3); }
+.sld .active .wire, .sld .wire.active { stroke: var(--energized); }
+.sld .active .node, .sld .active .feeder-node { fill: var(--energized); stroke: var(--energized); }
+.sld .active text { fill: var(--ink); }
+.sld .active .ring { animation: ring 1.6s ease-out infinite; }
+.sld .done .wire, .sld .wire.done { stroke: var(--conductor); }
+.sld .done .node, .sld .done .feeder-node { fill: var(--conductor); stroke: var(--conductor); }
+.sld .done text { fill: var(--ink); }
+.sld .skipped .wire, .sld .wire.skipped { stroke-dasharray: 2 7; }
+.sld.static .wire { stroke: var(--ink-2); }
+.sld.static .node, .sld.static .feeder-node { fill: var(--sheet); stroke: var(--ink-2); }
+.sld.static .node.end { fill: var(--conductor); stroke: var(--conductor); }
+.sld.static .exit { stroke: var(--line); stroke-dasharray: 3 5; }
+.sld.static text.exit-label { font: 500 13px var(--sans); fill: var(--ink-3); }
+@keyframes ring { 0% { opacity: 0.9; r: 9; } 100% { opacity: 0; r: 20; } }
+@media (prefers-reduced-motion: reduce) { .sld .active .ring { animation: none; } .sld * { transition: none !important; } }
+
+/* ---------- landing ---------- */
+.try h2 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+.try > p { font-size: 0.9rem; color: var(--ink-2); margin: 0 0 0.9rem; max-width: var(--measure); }
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 0.55rem; }
+.chip { text-align: left; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.65rem 0.85rem 0.7rem; cursor: pointer; font-size: 0.92rem; line-height: 1.38; display: flex; flex-direction: column; gap: 0.25rem; }
+.chip:hover { border-color: var(--conductor); }
+.chip .topic { font: 600 0.88rem/1 var(--display); color: var(--conductor); }
+.chip.limit .topic { color: var(--ink-3); }
+.try p.limits { font-size: 0.86rem; color: var(--ink-3); margin: 1.1rem 0 0; }
+
+/* ---------- how it works ---------- */
+.back { display: inline-block; font-size: 0.9rem; margin-bottom: 1.25rem; }
+.how-part { padding: 2.25rem 0 0.5rem; border-top: 1px solid var(--line); margin-top: 0.5rem; }
+.how-part h2 { font-size: 1.5rem; line-height: 1.15; margin: 0 0 0.35rem; }
+.part-lede { color: var(--ink-2); max-width: var(--measure); margin: 0 0 1.4rem; }
+.how-part h2 + .trust { margin-top: 1.1rem; }
+.asked { margin: 0 0 1.5rem; padding: 0.15rem 0 0.15rem 1rem; border-left: 3px solid var(--energized); font: 500 1.2rem/1.35 var(--display); max-width: var(--measure); color: var(--ink); }
+.steps .secs { display: block; font-size: 0.78rem; color: var(--ink-3); margin-bottom: 0.3rem; font-variant-numeric: tabular-nums; }
+.cols4.steps b { margin-bottom: 0; }
+.result { margin: 1.5rem 0 0; padding: 0.85rem 1rem; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; max-width: var(--measure); }
+.result span { display: block; font: 600 1rem/1.2 var(--display); color: var(--conductor); margin-bottom: 0.2rem; }
+
+.trust { margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+.trust dt { font: 600 1.05rem/1.25 var(--display); margin-bottom: 0.3rem; }
+.trust dd { margin: 0; font-size: 0.9rem; color: var(--ink-2); line-height: 1.5; }
+
+.outcomes { margin-top: 2rem; }
+.outcomes h3 { font-size: 1.1rem; margin: 0 0 0.6rem; }
+.stack { display: flex; height: 28px; border-radius: 6px; overflow: hidden; background: var(--line-soft); }
+.stack span { display: block; height: 100%; border-right: 2px solid var(--paper); }
+.stack span:last-child { border-right: none; }
+.stack-key { list-style: none; padding: 0; margin: 0.7rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; font-size: 0.88rem; color: var(--ink-2); }
+.stack-key li { display: flex; align-items: center; gap: 0.45rem; }
+.stack-key i, .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: none; }
+.stack-key b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0.75rem; align-items: stretch; }
+.flow-col { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; }
+.flow-col.build { background: var(--conductor-soft); border-color: #C7D8EA; }
+.flow-col h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.flow-col p { margin: 0; font-size: 0.88rem; color: var(--ink-2); line-height: 1.5; }
+.flow-col ul { list-style: none; padding: 0; margin: 0; }
+.flow-col li { padding: 0.35rem 0; border-top: 1px solid var(--line-soft); font-size: 0.9rem; }
+.flow-col li:first-child { border-top: none; padding-top: 0; }
+.flow-col li span { display: block; font-size: 0.82rem; color: var(--ink-2); }
+.flow-col code { font: 500 0.84rem var(--mono); color: var(--ink); }
+.flow-arrow { display: flex; align-items: center; color: var(--ink-3); }
+.flow-arrow svg { width: 22px; height: 22px; }
+
+.keys { display: grid; grid-template-columns: 2fr 1.4fr 1fr; gap: 1.5rem; }
+.keys h3 { font-size: 1.02rem; margin: 0 0 0.5rem; }
+.keys ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 1.25rem; font-size: 0.86rem; color: var(--ink-2); }
+.keys li { display: flex; align-items: center; gap: 0.45rem; padding: 0.12rem 0; break-inside: avoid; }
+
+/* ---------- conversation ---------- */
+.exchange { padding: 2.25rem 0 1.75rem; border-bottom: 1px solid var(--line); }
+.exchange:last-child { border-bottom: none; }
+.question { font-size: 1.6rem; line-height: 1.2; margin: 0 0 1.1rem; max-width: var(--measure); }
+
+.progress { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem 0.9rem; }
+.progress-head { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.4rem; }
+.progress-head .caption { font: 600 1.05rem/1.2 var(--display); }
+.progress-head .clock { margin-left: auto; color: var(--ink-3); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.progress .hint { font-size: 0.82rem; color: var(--ink-3); margin: 0.2rem 0 0; }
+.log { list-style: none; margin: 0.6rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--line-soft); font-size: 0.86rem; max-height: 11.5rem; overflow: hidden; display: flex; flex-direction: column-reverse; }
+.log li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 0.6rem; padding: 0.12rem 0; color: var(--ink-2); }
+.log li .who { color: var(--conductor); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log li.note .what { color: #9A4F06; }
+.log li.err .what { color: var(--bad); }
+
+.badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }
+.badge { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500; padding: 0.18rem 0.6rem 0.2rem; border-radius: 99px; background: var(--line-soft); color: var(--ink-2); }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+.badge.good { background: var(--good-soft); color: var(--good); }
+.badge.warn { background: var(--energized-soft); color: #9A4F06; }
+.badge.plain::before { display: none; }
+
+.answer { font-size: 1rem; }
+.answer > :first-child { margin-top: 0; }
+.answer p, .answer ul, .answer ol { max-width: var(--measure); }
+.answer p { margin: 0 0 0.85rem; }
+.answer ul, .answer ol { margin: 0 0 0.9rem; padding-left: 1.2rem; }
+.answer li { margin: 0.2rem 0; }
+.answer .subhead { font: 600 1.05rem/1.25 var(--display); color: var(--ink-2); margin: 1.6rem 0 0.4rem; }
+.answer .viz-title { font: 600 1.15rem/1.25 var(--display); color: var(--ink); margin: 1.6rem 0 0.55rem; max-width: none; }
+.answer code { font: 0.86em var(--mono); background: var(--line-soft); padding: 0.05em 0.3em; border-radius: 3px; }
+.answer em { color: var(--ink-2); }
+.answer.error { color: var(--bad); }
+
+.table-wrap { position: relative; overflow-x: auto; margin: 0 0 0.2rem; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; }
+.table-wrap.scrolls { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent); }
+.answer table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.answer th, .answer td { padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: bottom; }
+.answer td { vertical-align: top; }
+.answer th { font-weight: 600; color: var(--ink-2); background: #F8FAF9; cursor: pointer; user-select: none; min-width: 5.5rem; line-height: 1.3; }
+.answer th:first-child, .answer td:first-child { padding-left: 0.9rem; }
+.answer th[aria-sort="ascending"]::after { content: " ▲"; font-size: 0.7em; }
+.answer th[aria-sort="descending"]::after { content: " ▼"; font-size: 0.7em; }
+.answer tr:last-child td { border-bottom: none; }
+.answer td[align="right"], .answer th[align="right"] { text-align: right; }
+.answer p.table-note { font-size: 0.84rem; color: var(--ink-3); margin: 0.35rem 0 0; }
+
+figure.viz { margin: 0 0 1.25rem; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1rem 0.75rem; }
+figure.viz .plot { width: 100%; }
+.viz-tools, .table-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; font-size: 0.82rem; color: var(--ink-3); margin: 0.45rem 0 1.25rem; }
+figure.viz .viz-tools { margin: 0.6rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--line-soft); }
+.linkish { background: none; border: none; padding: 0; color: var(--conductor); cursor: pointer; font-size: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.viz-tools label { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink-2); }
+.viz-tools select { border: 1px solid var(--line); border-radius: 6px; background: var(--sheet); padding: 0.15rem 0.4rem; font-size: 0.85rem; }
+.viz-tools .tip { margin-left: auto; }
+.viz-after { margin-bottom: 1.25rem; }
+pre.sql { display: none; margin: 0.5rem 0 1rem; padding: 0.75rem 0.9rem; background: #F7F9FA; border: 1px solid var(--line); border-radius: 8px; font: 0.8rem/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+pre.sql.open { display: block; }
+
+/* trace */
+details.trace { margin-top: 1.5rem; border-top: 1px solid var(--line-soft); padding-top: 0.8rem; }
+details.trace > summary { cursor: pointer; font-size: 0.9rem; color: var(--ink-2); list-style: none; display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem; align-items: baseline; }
+details.trace > summary::-webkit-details-marker { display: none; }
+details.trace > summary b { font-weight: 600; color: var(--ink); }
+details.trace > summary b::before { content: "+"; display: inline-block; width: 1rem; color: var(--conductor); }
+details.trace[open] > summary b::before { content: "\2212"; }
+.trace-body { padding: 0.85rem 0 0 1rem; font-size: 0.88rem; }
+.trace-plan { margin: 0 0 1rem; color: var(--ink-2); max-width: var(--measure); }
+.trace-plan ol { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+.trace-group { margin: 0 0 1rem; }
+.trace-group h4 { font-size: 1rem; line-height: 1.2; margin: 0 0 0.3rem; display: flex; gap: 0.6rem; align-items: baseline; }
+.trace-group h4 small { font: 400 0.8rem var(--sans); color: var(--ink-3); }
+.call { border-left: 2px solid var(--line); padding: 0.1rem 0 0.1rem 0.7rem; margin: 0.15rem 0; }
+.call.note { border-left-color: var(--energized); }
+.call > summary { cursor: pointer; color: var(--ink); list-style: none; }
+.call > summary::-webkit-details-marker { display: none; }
+.call > summary .tool { color: var(--ink-3); font-size: 0.8rem; margin-left: 0.4rem; }
+.call pre { margin: 0.35rem 0 0.4rem; padding: 0.55rem 0.7rem; background: #F7F9FA; border: 1px solid var(--line-soft); border-radius: 6px; font: 0.76rem/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 22rem; overflow: auto; }
+.call .label { font-size: 0.78rem; color: var(--ink-3); margin-top: 0.3rem; }
+.retry { margin-top: 0.4rem; }
+
+/* ---------- composer ---------- */
+.composer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--paper); border-top: 1px solid var(--line); padding: 0.75rem 0 0.7rem; }
+.composer form { max-width: var(--col); margin: 0 auto; padding: 0 var(--gutter); }
+.field { display: flex; gap: 0.5rem; align-items: flex-end; background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 0.45rem 0.45rem 0.45rem 0.9rem; }
+.field:focus-within { border-color: var(--conductor); }
+.field.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 4px var(--conductor-soft); } 100% { box-shadow: none; } }
+textarea:focus-visible { outline: none; }
+textarea { flex: 1; border: none; outline: none; resize: none; background: transparent; font-size: 1rem; line-height: 1.5; padding: 0.35rem 0; max-height: 9rem; }
+textarea::placeholder { color: var(--ink-3); }
+.send { background: var(--conductor); color: #fff; border: none; border-radius: 8px; padding: 0.5rem 1.05rem; font-weight: 600; font-size: 0.92rem; cursor: pointer; }
+.send:disabled { background: var(--line); color: var(--ink-3); cursor: default; }
+.composer .meta { display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--ink-3); margin: 0.35rem 0.2rem 0; }
+
+@media (max-width: 760px) {
+  :root { --gutter: 1rem; }
+  .keys ul { columns: 2; }
+  .cols4 { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+  .pipeline-svg { margin-bottom: 1rem; }
+  .trust, .keys { grid-template-columns: 1fr; gap: 1.1rem; }
+  .flow { grid-template-columns: 1fr; }
+  .flow-arrow { justify-content: center; transform: rotate(90deg); height: 22px; }
+  .log li { grid-template-columns: 6rem 1fr; }
+  .viz-tools .tip { margin-left: 0; width: 100%; }
+  .question { font-size: 1.35rem; }
+  .composer .meta span:first-child { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <a class="mark" href="#" id="home-link" aria-label="GridQueue home">
+      <svg viewBox="0 0 30 18" aria-hidden="true"><path d="M2 9h8M10 9c3 0 3-5 6-5h4M10 9c3 0 3 5 6 5h4M20 4c3 0 3 5 6 5M20 14c3 0 3-5 6-5" fill="none" stroke="#1C5D99" stroke-width="2" stroke-linecap="round"/><circle cx="3" cy="9" r="2.4" fill="#1A2430"/><circle cx="27" cy="9" r="2.4" fill="#D9730D"/></svg>
+      <span>GridQueue</span>
+    </a>
+    <nav class="bar-actions">
+      <a class="quiet" id="how-link" href="#how-it-works">How it works</a>
+      <button class="quiet" id="new-btn" type="button" hidden>New chat</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="intro" id="intro">
+    <h1>Ask a question about the US grid interconnection queue.</h1>
+    <p class="lede">8,513 power projects, 1,865 GW in all, are waiting for permission to connect to the US grid. GridQueue answers questions about them with SQL on public data, checks its own numbers, and shows every query it ran.</p>
+
+    <figure class="pipeline" aria-label="How an answer is made">
+      <div class="pipeline-svg" id="how-diagram"></div>
+      <div class="cols4">
+        <div><b>Planner</b>Splits your question into parts the data can answer</div>
+        <div><b>SQL workers</b>Query the database in parallel, one part each</div>
+        <div><b>Verifier</b>Checks each number against the queries behind it</div>
+        <div><b>Writer</b>Writes the answer; code draws the tables and maps</div>
+      </div>
+      <figcaption><a href="#how-it-works">See a real question go through each step</a></figcaption>
+    </figure>
+
+    <div class="try">
+      <h2>Try a question</h2>
+      <p>Answers take 30 to 90 seconds. Follow up in plain words, like "now just Texas", or click a bar or county to ask about it.</p>
+      <div class="chips" id="chips"></div>
+      <p class="limits">It can't answer questions about electricity demand, including data centers, interconnection costs in CAISO or ERCOT, or final costs. <a href="#limits">Why</a></p>
+    </div>
+  </section>
+
+  <section class="how" id="how-it-works" tabindex="-1" aria-labelledby="how-title">
+    <a class="back" href="#">Back to questions</a>
+    <h1 id="how-title">How GridQueue answers a question</h1>
+    <p class="lede">GridQueue is for developers deciding where to build, energy analysts tracking the backlog, and policy and ratepayer groups who need numbers they can source. A team of four agents turns a plain-English question into SQL, checks the result, and explains it.</p>
+
+    <section class="how-part" aria-labelledby="trace-title">
+      <h2 id="trace-title">One question, start to finish</h2>
+      <p class="part-lede">A real run, with the time each step took.</p>
+      <blockquote class="asked">Which counties have the most active queue capacity relative to the generation already operating there?</blockquote>
+      <div class="pipeline-svg" id="trace-diagram"></div>
+      <div class="cols4 steps">
+        <div><b>Planner</b><span class="secs">6.5 s</span>Kept it as one question, limited to counties with at least 50 MW already operating, so a tiny base can't make a huge ratio</div>
+        <div><b>SQL worker</b><span class="secs">25.5 s</span>Ran 4 queries and returned 1,497 counties ranked by queued-to-operating ratio</div>
+        <div><b>Verifier</b><span class="secs">17.8 s</span>Ran 3 queries of its own to confirm the top ratios and the county count. All checks passed</div>
+        <div><b>Writer</b><span class="secs">11.5 s</span>Wrote the answer and asked for a county map and a top 10 table, which code drew from the worker's SQL</div>
+      </div>
+      <p class="result"><span>Answer in 61 seconds</span>Deschutes County, Oregon has about 186 times more capacity queued than operating, followed by Crook County, Oregon and Colorado County, Texas.</p>
+    </section>
+
+    <section class="how-part" aria-labelledby="trust-title">
+      <h2 id="trust-title">Why you can check the numbers</h2>
+      <dl class="trust">
+        <div><dt>Read-only SQL</dt><dd>Agents can run one SELECT at a time against a read-only database. Category values like region names are checked before a query runs, with a suggestion when one is misspelled.</dd></div>
+        <div><dt>A second agent checks the work</dt><dd>The Verifier re-runs queries of its own against each finding and can send a worker back for a follow-up.</dd></div>
+        <div><dt>Every number is traced</dt><dd>Code compares each number in the answer with the query results. A number it can't find goes back to the Writer for one revision. Tables, charts and maps are drawn by code from the SQL.</dd></div>
+      </dl>
+    </section>
+
+    <section class="how-part" aria-labelledby="queue-title">
+      <h2 id="queue-title">What the queue is</h2>
+      <p class="part-lede">Before a power plant can connect to the grid, it files an interconnection request and waits while the grid operator studies what upgrades it would need. Most requests never get built.</p>
+      <div class="pipeline-svg" id="lifecycle-diagram"></div>
+      <div class="cols4">
+        <div><b>Request filed</b>The developer applies and joins the queue</div>
+        <div><b>Studies</b>The grid operator models the upgrades and their cost</div>
+        <div><b>Agreement</b>Both sides sign an interconnection agreement</div>
+        <div><b>Operating</b>The project is built and connected</div>
+      </div>
+      <div class="outcomes">
+        <h3>What happened to the 22,348 requests filed from 2000 to 2020</h3>
+        <div class="stack" role="img" aria-label="70.9% withdrawn, 18.8% operating, 9.0% still active, 1.4% suspended">
+          <span style="width:70.9%;background:#A3AEB9"></span><span style="width:18.8%;background:#1C5D99"></span><span style="width:9.0%;background:#D9730D"></span><span style="width:1.4%;background:#C9A227"></span>
         </div>
-        <script>
-            const messages = document.getElementById("messages");
-            const userInput = document.getElementById("user-input");
-            const sendBtn = document.getElementById("send-btn");
-            const MARKER = /<!--gq:(table|chart|map):(\d+)-->/g;
-            let sessionId = null;
+        <ul class="stack-key">
+          <li><i style="background:#A3AEB9"></i><b>70.9%</b> withdrawn (15,840)</li>
+          <li><i style="background:#1C5D99"></i><b>18.8%</b> operating (4,196)</li>
+          <li><i style="background:#D9730D"></i><b>9.0%</b> still active (2,005)</li>
+          <li><i style="background:#C9A227"></i><b>1.4%</b> suspended (303)</li>
+        </ul>
+        <p class="note">Only 3,934 of these requests signed an agreement, and 1,332 of those still withdrew. Across all years, projects that reached operation took a median of 1,309 days, about 3.6 years, from request to operation. That median counts only finished projects, so it understates today's waits.</p>
+      </div>
+    </section>
 
-            function escapeHtml(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    <section class="how-part" aria-labelledby="data-title">
+      <h2 id="data-title">Where the data comes from</h2>
+      <p class="part-lede">Three public sources are cleaned and joined once, offline, into one 7.9 MB database. The agents query that database, never the raw files.</p>
+      <div class="flow">
+        <div class="flow-col">
+          <h3>Sources</h3>
+          <ul>
+            <li><a href="https://emp.lbl.gov/queues" target="_blank" rel="noopener">LBNL Queued Up 2026</a><span>Every queue request through 2025</span></li>
+            <li><a href="https://www.eia.gov/electricity/data/eia860/" target="_blank" rel="noopener">EIA-860 2025</a><span>Existing and planned generators</span></li>
+            <li><a href="https://emp.lbl.gov/interconnection_costs" target="_blank" rel="noopener">LBNL cost studies</a><span>Upgrade cost estimates from 5 grid operators and other utilities</span></li>
+          </ul>
+        </div>
+        <div class="flow-arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="flow-col build">
+          <h3>Offline build</h3>
+          <p>Fixes broken names and missing values, matches counties to FIPS codes, converts costs to 2024 dollars, and marks which cost estimate is primary when a project was studied more than once.</p>
+        </div>
+        <div class="flow-arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="flow-col">
+          <h3>Tables</h3>
+          <ul class="tables">
+            <li><code>projects</code><span>38,201 queue requests</span></li>
+            <li><code>eia_generators</code><span>36,571 generators</span></li>
+            <li><code>costs</code><span>5,485 cost estimates</span></li>
+            <li><code>county_summary</code><span>2,634 counties</span></li>
+            <li><code>poi_summary</code><span>24,524 grid connection points</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">Tables join on county FIPS code, state and region.</p>
+    </section>
 
-            function addMessage(role, text, isLoading = false) {
-                const div = document.createElement("div");
-                div.className = "msg " + (role === "you" ? "user" : "assistant") + (isLoading ? " loading" : "");
-                div.innerHTML = '<div class="role"></div><div class="content"></div>';
-                div.querySelector(".role").textContent = role;
-                div.querySelector(".content").textContent = text;
-                messages.appendChild(div);
-                messages.scrollTop = messages.scrollHeight;
-                return div;
-            }
+    <section class="how-part" aria-labelledby="colors-title">
+      <h2 id="colors-title">Colors in the charts</h2>
+      <p class="part-lede">Each resource type, region and status keeps one color across every chart, so you can read a new chart at a glance.</p>
+      <div class="keys" id="color-keys"></div>
+    </section>
 
-            function addToolCall(call, before) {
-                const d = document.createElement("details");
-                d.className = "tool";
-                const s = document.createElement("summary");
-                const a = document.createElement("span"); a.className = "agent"; a.textContent = (call.agent || "") + "  ";
-                s.append(a, document.createTextNode(call.name));
-                d.append(s, document.createTextNode(JSON.stringify(call.args, null, 1) + "\n→ " + call.result));
-                messages.insertBefore(d, before);
-            }
+    <section class="how-part" id="limits" aria-labelledby="limits-title">
+      <h2 id="limits-title">What it can't answer</h2>
+      <dl class="trust">
+        <div><dt>Electricity demand</dt><dd>The queues list generation and storage. Large loads such as data centers aren't in them.</dd></div>
+        <div><dt>Costs in CAISO and ERCOT</dt><dd>The LBNL cost studies cover PJM, MISO, SPP, NYISO, ISO-NE and some utilities in the West and Southeast.</dd></div>
+        <div><dt>Final costs</dt><dd>The studies are estimates made while projects wait, not what was finally paid.</dd></div>
+      </dl>
+      <p class="note">When a question needs data like this, GridQueue says so instead of guessing.</p>
+    </section>
+  </section>
 
-            function csv(columns, rows) {
-                const q = (v) => (v === null ? "" : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
-                return [columns.map(q).join(",")].concat(rows.map((r) => r.map(q).join(","))).join("\n");
-            }
+  <section id="conversation" aria-live="polite"></section>
+</main>
 
-            function sortable(table) {
-                table.querySelectorAll("th").forEach((th, i) => th.addEventListener("click", () => {
-                    const body = table.tBodies[0], rows = Array.from(body.rows);
-                    const asc = th.dataset.asc !== "1"; th.dataset.asc = asc ? "1" : "0";
-                    const val = (r) => { const t = r.cells[i].textContent.replace(/[,$%]/g, ""); const n = parseFloat(t); return isNaN(n) ? t : n; };
-                    rows.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * (asc ? 1 : -1));
-                    rows.forEach((r) => body.appendChild(r));
-                }));
-            }
+<div class="composer">
+  <form id="composer" autocomplete="off">
+    <label for="input" class="sr-only">Your question</label>
+    <div class="field" id="field">
+      <textarea id="input" rows="1" maxlength="2000" placeholder="Ask about queued projects, costs, wait times or where projects are proposed"></textarea>
+      <button class="send" id="send" type="submit" disabled>Ask</button>
+    </div>
+    <div class="meta"><span>Enter to ask, Shift+Enter for a new line</span><span id="count"></span></div>
+  </form>
+</div>
 
-            function tableTools(holder, v) {
-                const tools = document.createElement("div"); tools.className = "tools";
-                const dl = document.createElement("a"); dl.textContent = "Download CSV";
-                dl.onclick = () => { const b = new Blob([csv(v.columns, v.rows)], { type: "text/csv" });
-                    dl.href = URL.createObjectURL(b); dl.download = (v.title || "gridqueue") + ".csv"; };
-                const sq = document.createElement("a"); sq.textContent = "Show SQL";
-                const pre = document.createElement("div"); pre.className = "sql"; pre.textContent = v.sql;
-                sq.onclick = () => { pre.style.display = pre.style.display === "block" ? "none" : "block"; };
-                tools.append(dl, sq); holder.append(tools, pre);
-            }
+<script id="palette" type="application/json">{"resource": {"Solar": "#D4A017", "Solar+Battery": "#E9C46A", "Wind": "#2A9D8F", "Wind+Battery": "#76C7BA", "Offshore Wind": "#176D78", "Offshore Wind+Battery": "#5EA8B0", "Battery": "#7B5EA7", "Pumped Storage": "#6E9FD4", "Gas": "#8D6E63", "Gas+Battery": "#BCAAA4", "Coal": "#3F3F46", "Oil": "#5B4636", "Nuclear": "#B83280", "Hydro": "#2F6FB0", "Geothermal": "#B4532A", "Biomass": "#5E8C31", "Other": "#94A3B8", "Other Hybrid": "#CBD5E1"}, "region": {"PJM": "#1C5D99", "MISO": "#2E7D4F", "ERCOT": "#B3392F", "CAISO": "#D9730D", "SPP": "#7B5EA7", "NYISO": "#0F8B8D", "ISO-NE": "#A0522D", "West": "#C9A227", "Southeast": "#5D7385"}, "status": {"Active": "#D9730D", "Operational": "#1C5D99", "Withdrawn": "#A3AEB9", "Suspended": "#C9A227", "Unknown": "#CBD5E1"}}</script>
+<script>
+"use strict";
 
-            function renderAnswer(el, text, toolCalls) {
-                const visuals = {};
-                for (const c of toolCalls) if (c.visual) visuals[c.visual.marker] = c.visual;
-                // Markers become placeholders; everything else is escaped before markdown (no raw HTML).
-                const safe = escapeHtml(text.replace(MARKER, (m) => "\n\n@@" + m.slice(4, -3) + "@@\n\n"));
-                el.innerHTML = marked.parse(safe);
-                el.querySelectorAll("table").forEach(sortable);
-                el.querySelectorAll("p").forEach((p) => {
-                    const m = p.textContent.trim().match(/^@@gq:(table|chart|map):(\d+)@@$/);
-                    if (!m) return;
-                    const v = visuals[`<!--gq:${m[1]}:${m[2]}-->`];
-                    const holder = document.createElement("div");
-                    p.replaceWith(holder);
-                    if (!v) return;
-                    if (v.kind === "table") { tableTools(holder, v); return; }
-                    const box = document.createElement("div"); box.className = "viz"; holder.append(box);
-                    vegaEmbed(box, v.spec, { actions: { export: true, source: false, compiled: false, editor: false } })
-                        .catch((e) => { box.textContent = "Chart failed to render: " + e.message; });
-                    const pre = document.createElement("div");
-                    pre.className = "sql"; pre.textContent = v.sql;
-                    const tools = document.createElement("div"); tools.className = "tools";
-                    const sq = document.createElement("a"); sq.textContent = "Show SQL";
-                    sq.onclick = () => { pre.style.display = pre.style.display === "block" ? "none" : "block"; };
-                    tools.append(sq); holder.append(tools, pre);
-                });
-            }
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+const EXAMPLES = [
+  { topic: "Queue size", q: "How much capacity is active in each region's queue, by resource type?" },
+  { topic: "Outcomes", q: "What share of solar, wind, battery and gas projects that entered interconnection queues between 2000 and 2020 actually got built?" },
+  { topic: "Costs", q: "Do projects that withdrew face higher interconnection costs than projects that got built? Compare by region." },
+  { topic: "Wait times", q: "How has the time to commercial operation changed over the years in ERCOT vs. PJM?" },
+  { topic: "Siting", q: "Which counties have the most active queue capacity relative to the generation already operating there?" },
+  { topic: "Out of scope", q: "How much data center demand is in the interconnection queue?", limit: true },
+];
 
-            async function send() {
-                const text = userInput.value.trim();
-                if (!text) return;
-                userInput.value = ""; sendBtn.disabled = true;
-                addMessage("you", text);
-                const loading = addMessage("assistant", "Working (planning, querying, checking)...", true);
-                try {
-                    const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-                                                     body: JSON.stringify({ message: text, session_id: sessionId }) });
-                    const data = await res.json();
-                    sessionId = data.session_id;
-                    for (const call of data.tool_calls || []) addToolCall(call, loading);
-                    renderAnswer(loading.querySelector(".content"), data.response, data.tool_calls || []);
-                } catch (e) {
-                    loading.querySelector(".content").textContent = "Error: " + e.message;
-                }
-                loading.classList.remove("loading"); sendBtn.disabled = false; userInput.focus();
-            }
+const STAGE_CAPTION = {
+  plan: "Planning the question",
+  workers: (n) => n > 1 ? `Querying the data with ${n} workers` : "Querying the data",
+  verify: "Checking the numbers",
+  follow_ups: "Running a follow-up check",
+  write: "Writing the answer",
+  revise: "Fixing numbers the check couldn't trace",
+};
 
-            sendBtn.addEventListener("click", send);
-            userInput.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-            userInput.focus();
-        </script>
-    </body>
+// Vega config so charts match the page.
+const VEGA_CONFIG = {
+  font: "Public Sans",
+  background: null,
+  title: { font: "Barlow Semi Condensed", fontSize: 16, fontWeight: 600, color: "#1A2430", anchor: "start", offset: 12 },
+  axis: { labelColor: "#4A5866", titleColor: "#4A5866", titleFontWeight: 500, labelFontSize: 11, titleFontSize: 12,
+          gridColor: "#E3E8EC", domainColor: "#CDD4DA", tickColor: "#CDD4DA" },
+  legend: { labelColor: "#4A5866", titleColor: "#4A5866", labelFontSize: 11 },
+  range: { category: ["#1C5D99", "#D9730D", "#2E7D4F", "#7B5EA7", "#B3392F", "#5D7385"] },
+  bar: { color: "#1C5D99" }, line: { color: "#1C5D99" }, point: { color: "#1C5D99" },
+  mark: { cursor: "pointer" },
+};
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+const $ = (sel, root = document) => root.querySelector(sel);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined) n.append(kid);
+  return n;
+};
+const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const plural = (n, word, many) => `${n} ${n === 1 ? word : (many || word + "s")}`;
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const workerIndex = (agent) => { const m = /^SQL Worker (\d+)$/.exec(agent || ""); return m ? +m[1] : null; };
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------------------------------------------------------------------------
+// Single-line diagram of the pipeline: Planner bus, a feeder per SQL worker, Verifier, Writer
+// ---------------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs = {}) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+
+// Nodes sit at the centre of each quarter of the column (x = 100, 300, 500, 700 of 800), so the
+// 4-column caption grid under every diagram lines up with them at any width.
+const COLS = [100, 300, 500, 700];
+
+function buildDiagram(workers, isStatic, wireLabels) {
+  const n = Math.max(1, Math.min(workers, 4));
+  const H = isStatic ? (wireLabels ? 70 : 60) : 96, cy = isStatic ? H - 30 : 38;
+  const split = 205, join = 395, mid = COLS[1];
+  const svg = svgEl("svg", { viewBox: `0 0 800 ${H}`, class: "sld" + (isStatic ? " static" : ""), role: "img",
+    "aria-label": "Planner, then " + plural(n, "SQL worker") + " in parallel, then Verifier, then Writer" });
+  const parts = {};
+  const group = (key) => { const g = svgEl("g", { "data-part": key }); svg.append(g); parts[key] = g; return g; };
+  const label = (g, x, text) => {
+    if (isStatic) return;  // static diagrams have a caption grid underneath instead
+    const t = svgEl("text", { x, y: H - 8, "text-anchor": "middle" }); t.textContent = text; g.append(t);
+  };
+  const node = (g, x, text) => {
+    g.append(svgEl("circle", { class: "ring", cx: x, cy, r: 9 }), svgEl("circle", { class: "node", cx: x, cy, r: 9 }));
+    label(g, x, text);
+  };
+  // wires first so nodes sit on top
+  group("wire-plan").append(svgEl("path", { class: "wire", d: `M${COLS[0]} ${cy} H${split}` }));
+  const gap = n === 1 ? 0 : Math.min(14, 40 / (n - 1));
+  for (let i = 1; i <= n; i++) {
+    const y = cy + (i - (n + 1) / 2) * gap;
+    const g = group("worker-" + i);
+    g.append(svgEl("path", { class: "wire", d: `M${split} ${cy} C${split + 30} ${cy} ${split + 26} ${y} ${split + 56} ${y} H${join - 56} C${join - 26} ${y} ${join - 30} ${cy} ${join} ${cy}` }));
+    g.append(svgEl("rect", { class: "feeder-node", x: mid - 6, y: y - 6, width: 12, height: 12, rx: 2 }));
+  }
+  group("wire-verify").append(svgEl("path", { class: "wire", d: `M${join} ${cy} H${COLS[2]}` }));
+  group("wire-write").append(svgEl("path", { class: "wire", d: `M${COLS[2]} ${cy} H${COLS[3]}` }));
+  node(group("plan"), COLS[0], "Planner");
+  label(group("workers-label"), mid, n > 1 ? "SQL workers" : "SQL worker");
+  node(group("verify"), COLS[2], "Verifier");
+  node(group("write"), COLS[3], "Writer");
+  if (wireLabels) {
+    // What passes between the agents, written above each wire.
+    [[COLS[0] + 52, "plan"], [COLS[1] + 100, "finding + SQL"], [COLS[2] + 100, "verified finding"]].forEach(([x, t]) => {
+      const lbl = svgEl("text", { x, y: cy - 16, "text-anchor": "middle", class: "wire-label" }); lbl.textContent = t; svg.append(lbl);
+    });
+  }
+  svg.parts = parts; svg.workers = n;
+  return svg;
+}
+
+// The queue: request -> studies -> agreement -> operating, with a withdrawal exit under the first three.
+function buildLifecycle() {
+  const H = 92, cy = 22, exitY = 70;
+  const svg = svgEl("svg", { viewBox: `0 0 800 ${H}`, class: "sld static", role: "img",
+    "aria-label": "Request filed, then studies, then agreement, then operating. A project can withdraw at any of the first three stages." });
+  svg.append(svgEl("path", { class: "wire", d: `M${COLS[0]} ${cy} H${COLS[3]}` }));
+  svg.append(svgEl("path", { class: "wire exit", d: `M${COLS[0]} ${exitY} H${COLS[2] + 40}` }));
+  COLS.slice(0, 3).forEach((x) => svg.append(svgEl("path", { class: "wire exit", d: `M${x} ${cy + 9} V${exitY}` })));
+  const t = svgEl("text", { x: COLS[2] + 52, y: exitY + 4, class: "exit-label" }); t.textContent = "Withdrawn at any stage";
+  svg.append(t);
+  COLS.forEach((x, i) => svg.append(svgEl("circle", { class: "node" + (i === 3 ? " end" : ""), cx: x, cy, r: 9 })));
+  return svg;
+}
+
+function setPart(svg, key, state) {
+  const g = svg.parts[key];
+  if (!g) return;
+  g.classList.remove("active", "done", "skipped");
+  if (state) g.classList.add(state);
+}
+
+// ---------------------------------------------------------------------------
+// Live progress for one exchange
+// ---------------------------------------------------------------------------
+class Progress {
+  constructor(container) {
+    this.root = el("div", { class: "progress" });
+    this.caption = el("span", { class: "caption", text: STAGE_CAPTION.plan });
+    this.clock = el("span", { class: "clock", text: "0:00" });
+    this.diagramHolder = el("div");
+    this.log = el("ol", { class: "log", "aria-label": "Steps so far" });
+    this.hint = el("p", { class: "hint", text: "Usually 30 to 90 seconds." });
+    this.root.append(el("div", { class: "progress-head" }, this.caption, this.clock), this.diagramHolder, this.hint, this.log);
+    container.append(this.root);
+    this.workers = 1;
+    this.svg = buildDiagram(1, false);
+    this.diagramHolder.append(this.svg);
+    this.state = { plan: "active" };
+    this.paint();
+    this.start = performance.now();
+    this.timer = setInterval(() => { this.clock.textContent = fmtClock((performance.now() - this.start) / 1000); }, 500);
+  }
+
+  paint() {
+    for (const [k, v] of Object.entries(this.state)) setPart(this.svg, k, v);
+  }
+
+  redraw(workers) {
+    this.workers = workers;
+    const fresh = buildDiagram(workers, false);
+    this.svg.replaceWith(fresh); this.svg = fresh;
+    this.paint();
+  }
+
+  set(key, value) { this.state[key] = value; setPart(this.svg, key, value); }
+
+  addLog(who, what, kind = "") {
+    this.log.prepend(el("li", { class: kind }, el("span", { class: "who", text: who }), el("span", { class: "what", text: what })));
+    while (this.log.children.length > 40) this.log.lastChild.remove();
+  }
+
+  handle(ev) {
+    if (ev.type === "stage") return this.onStage(ev);
+    if (ev.type === "agent") {
+      const i = workerIndex(ev.agent);
+      if (i && i <= this.workers) this.set("worker-" + i, "active");
+      return;
+    }
+    if (ev.type === "tool") {
+      const kind = ev.name === "note" ? "note" : (ev.summary || "").startsWith("Error") ? "err" : "";
+      this.addLog(ev.agent, ev.summary || ev.name, kind);
+      const i = workerIndex(ev.agent);
+      if (i && i <= this.workers && ev.name === "submit_finding") this.set("worker-" + i, "done");
+    }
+  }
+
+  onStage(ev) {
+    const { stage, status } = ev;
+    if (status === "start") {
+      const cap = STAGE_CAPTION[stage];
+      this.caption.textContent = typeof cap === "function" ? cap(ev.count || this.workers) : (cap || this.caption.textContent);
+    }
+    if (stage === "plan" && status === "done") {
+      this.set("plan", "done");
+      const subs = ev.sub_questions || [];
+      if (ev.action === "answer" && subs.length) {
+        if (subs.length !== this.workers) this.redraw(subs.length);
+        if (subs.length > 1) subs.forEach((q, i) => this.addLog("Planner", `Part ${i + 1}: ${q}`));
+      }
+    }
+    if (stage === "workers" && status === "start") this.set("wire-plan", "done");
+    if (stage === "workers" && status === "done") {
+      for (let i = 1; i <= this.workers; i++) if (this.state["worker-" + i] !== "done") this.set("worker-" + i, "done");
+    }
+    if (stage === "verify" && status === "start") { this.set("wire-verify", "done"); this.set("verify", "active"); }
+    if (stage === "verify" && status === "done") this.set("verify", "done");
+    if (stage === "write" && status === "start") {
+      if (!this.state.verify) { this.set("verify", "skipped"); this.set("wire-verify", "skipped"); }
+      this.set("wire-write", "done"); this.set("write", "active");
+    }
+    if (stage === "revise" && status === "start") this.set("write", "active");
+  }
+
+  finish() {
+    clearInterval(this.timer);
+    this.root.remove();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering an answer: markdown, tables, charts, maps, badges, trace
+// ---------------------------------------------------------------------------
+const MARKER = /<!--gq:(table|chart|map):(\d+)-->/g;
+
+function csv(columns, rows) {
+  const q = (v) => (v === null || v === undefined ? "" : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
+  return [columns.map(q).join(",")].concat(rows.map((r) => r.map(q).join(","))).join("\n");
+}
+
+function makeSortable(table) {
+  const heads = Array.from(table.querySelectorAll("th"));
+  heads.forEach((th, i) => {
+    th.tabIndex = 0;
+    const sort = () => {
+      const body = table.tBodies[0]; if (!body) return;
+      const asc = th.getAttribute("aria-sort") !== "ascending";
+      heads.forEach((h) => h.removeAttribute("aria-sort"));
+      th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      const val = (r) => { const t = r.cells[i].textContent.trim(); const n = parseFloat(t.replace(/[,$%×x]/g, "")); return isNaN(n) || !/\d/.test(t) ? t.toLowerCase() : n; };
+      Array.from(body.rows).sort((a, b) => {
+        const x = val(a), y = val(b);
+        return (typeof x === typeof y ? (x > y ? 1 : x < y ? -1 : 0) : typeof x === "number" ? -1 : 1) * (asc ? 1 : -1);
+      }).forEach((r) => body.appendChild(r));
+    };
+    th.addEventListener("click", sort);
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); } });
+  });
+}
+
+function sqlToggle(sql) {
+  const pre = el("pre", { class: "sql", text: (sql || "").trim() });
+  const btn = el("button", { class: "linkish", type: "button", text: "Show SQL", "aria-expanded": "false" });
+  btn.addEventListener("click", () => {
+    const open = pre.classList.toggle("open");
+    btn.textContent = open ? "Hide SQL" : "Show SQL";
+    btn.setAttribute("aria-expanded", String(open));
+  });
+  return { btn, pre };
+}
+
+function tableTools(v) {
+  const dl = el("button", { class: "linkish", type: "button", text: "Download CSV" });
+  dl.addEventListener("click", () => {
+    const url = URL.createObjectURL(new Blob([csv(v.columns, v.rows)], { type: "text/csv" }));
+    const a = el("a", { href: url, download: (v.title || "gridqueue").replace(/[^\w\- ]+/g, "").trim() + ".csv" });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  const { btn, pre } = sqlToggle(v.sql);
+  const note = v.total_rows > v.rows.length ? el("span", { text: `CSV has the ${v.rows.length} rows shown` }) : null;
+  return [el("div", { class: "table-tools" }, dl, btn, note), pre];
+}
+
+function askAbout(datum, kind) {
+  if (!datum) return;
+  let q = null;
+  if (kind === "map" && datum.name) q = `Tell me more about ${datum.name}: what is in its queue and what already operates there?`;
+  else if (datum.category !== undefined) q = `Tell me more about ${datum.category}${datum.series && datum.series !== datum.category ? ` (${datum.series})` : ""}.`;
+  else if (datum.x !== undefined) q = `What happened in ${datum.x}${datum.series ? ` for ${datum.series}` : ""}?`;
+  else if (datum.label) q = `Tell me more about ${datum.label}.`;
+  if (!q) return;
+  input.value = q; autosize(); updateSend();
+  input.focus(); input.setSelectionRange(q.length, q.length);
+  const field = $("#field"); field.classList.remove("flash"); void field.offsetWidth; if (!reducedMotion) field.classList.add("flash");
+}
+
+async function embed(box, spec, kind) {
+  box.textContent = "";
+  try {
+    await document.fonts.ready;
+    const narrow = box.clientWidth < 560;
+    if (kind === "map") {
+      // A projection fitted to "container" width can render tiny on phones; give it real pixels.
+      const w = Math.max(260, box.clientWidth - 24);
+      spec = { ...spec, width: w, height: Math.min(420, Math.round(w * 0.62)) };
+    }
+    const config = narrow ? { ...VEGA_CONFIG, legend: { ...VEGA_CONFIG.legend, orient: "bottom" } } : VEGA_CONFIG;
+    const result = await vegaEmbed(box, spec, {
+      config, renderer: "svg",
+      actions: { export: true, source: false, compiled: false, editor: false },
+    });
+    result.view.addEventListener("click", (_e, item) => askAbout(item && item.datum, kind));
+  } catch (e) {
+    box.textContent = "This chart couldn't be drawn: " + e.message;
+  }
+}
+
+// Chart titles are taken out of the Vega spec and set above the frame, like table titles, so every
+// visual's title starts on the same left edge as the text.
+function specParts(spec) {
+  const { title, ...rest } = spec || {};
+  return { title: typeof title === "string" ? title : (title && title.text) || "", spec: rest };
+}
+
+function vizFigure(v, writtenTitle) {
+  const parts = [];
+  const first = specParts(v.spec);
+  const heading = writtenTitle || (first.title ? el("p", { class: "viz-title", text: first.title }) : null);
+  if (heading && !writtenTitle) parts.push(heading);
+  const fig = el("figure", { class: "viz" });
+  const box = el("div", { class: "plot" });
+  const { btn, pre } = sqlToggle(v.sql);
+  const tools = el("div", { class: "viz-tools" });
+  if (v.kind === "map" && v.metrics && v.metrics.length > 1) {
+    const select = el("select", { "aria-label": "Color counties by" },
+      v.metrics.map((m, i) => el("option", { value: i, text: m.label })));
+    select.addEventListener("change", () => {
+      const next = specParts(v.metrics[+select.value].spec);
+      if (heading && next.title) heading.textContent = next.title;
+      embed(box, next.spec, "map");
+    });
+    tools.append(el("label", {}, "Color counties by", select));
+  }
+  tools.append(btn, el("span", { class: "tip", text: v.kind === "map" ? "Hover for values. Click a county to ask about it." : "Hover for values. Click a mark to ask about it." }));
+  fig.append(box, tools, pre);
+  parts.push(fig);
+  embed(box, first.spec, v.kind);
+  return parts;
+}
+
+function watchOverflow(wrap) {
+  // A fade on the right edge while a wide table has more columns to scroll to.
+  const update = () => wrap.classList.toggle("scrolls", wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 2);
+  wrap.addEventListener("scroll", update, { passive: true });
+  new ResizeObserver(update).observe(wrap);
+  update();
+}
+
+const isBoldOnly = (p) => p && p.tagName === "P" && p.children.length === 1 && p.firstElementChild.tagName === "STRONG"
+  && p.textContent.trim() === p.firstElementChild.textContent.trim();
+const PLACEHOLDER = /^@@gq:(table|chart|map):(\d+)@@$/;
+
+function renderMarkdown(container, text, toolCalls) {
+  const visuals = {};
+  for (const c of toolCalls || []) if (c.visual) visuals[c.visual.marker] = c.visual;
+  // Markers become placeholder paragraphs; the rest is escaped before markdown, so no raw HTML gets through.
+  const safe = escapeHtml(text.replace(MARKER, (m) => "\n\n@@" + m.slice(4, -3) + "@@\n\n"));
+  container.innerHTML = marked.parse(safe);
+  container.querySelectorAll("a[href]").forEach((a) => {
+    if (!/^https?:/i.test(a.getAttribute("href"))) a.removeAttribute("href");
+    else { a.target = "_blank"; a.rel = "noopener"; }
+  });
+  container.querySelectorAll("table").forEach((t) => {
+    const wrap = el("div", { class: "table-wrap" }); t.replaceWith(wrap); wrap.append(t); makeSortable(t);
+  });
+
+  // Headings: a bold line right before a table or chart is that visual's title; any other heading
+  // ("How I got this", "Limits") is a quieter section label.
+  const isVisualNext = (n) => n && (n.classList?.contains("table-wrap") || PLACEHOLDER.test(n.textContent.trim()));
+  container.querySelectorAll("h1, h2, h3, h4, h5, h6, p").forEach((n) => {
+    const heading = /^H\d$/.test(n.tagName) || isBoldOnly(n);
+    if (!heading) return;
+    const next = n.nextElementSibling;
+    const p = el("p", { class: isVisualNext(next) ? "viz-title" : "subhead", text: n.textContent.trim() });
+    n.replaceWith(p);
+  });
+  container.querySelectorAll(".table-wrap").forEach((wrap) => {
+    const note = wrap.nextElementSibling;  // "First 10 of 1,497 rows."
+    if (note && note.tagName === "P" && note.children.length === 1 && note.firstElementChild.tagName === "EM") note.className = "table-note";
+  });
+
+  container.querySelectorAll("p").forEach((p) => {
+    const m = p.textContent.trim().match(PLACEHOLDER);
+    if (!m) return;
+    const v = visuals[`<!--gq:${m[1]}:${m[2]}-->`];
+    if (!v) { p.remove(); return; }
+    if (v.kind === "table") { p.replaceWith(...tableTools(v)); return; }
+    const prev = p.previousElementSibling;
+    p.replaceWith(...vizFigure(v, prev && prev.classList.contains("viz-title") ? prev : null));
+  });
+  container.querySelectorAll(".table-wrap").forEach(watchOverflow);
+}
+
+function badges(meta, toolCalls) {
+  const out = [];
+  if (!meta || meta.error) return out;
+  const v = meta.verdict;
+  if (meta.action === "answer" || v) {
+    if (v === "ok") out.push(["good", "Verified by a second agent"]);
+    else if (v === "needs_more") out.push(["good", "Verified after a follow-up check"]);
+    else if (v === "issues") out.push(["warn", "The verifier flagged issues"]);
+    else if (meta.action === "answer") out.push(["", "Not independently verified"]);
+  }
+  const un = meta.unsupported_numbers;
+  if (un) {
+    if (un.final && un.final.length) out.push(["warn", plural(un.final.length, "number") + " not traced to a query"]);
+    else if (un.first_draft && un.first_draft.length) out.push(["good", `Fixed ${plural(un.first_draft.length, "number")} the check couldn't trace`]);
+    else out.push(["good", "Every number traced to a query"]);
+  }
+  const queries = (toolCalls || []).filter((c) => c.name === "run_sql").length;
+  if (queries) out.push(["plain", plural(queries, "SQL query", "SQL queries")]);
+  if (meta.seconds) out.push(["plain", `Answered in ${Math.round(meta.seconds)} s`]);
+  return out;
+}
+
+const AGENT_ORDER = (a) => a === "Planner" ? 0 : a.startsWith("SQL Worker") ? 1 + (workerIndex(a) || 0) / 100 : a === "Verifier" ? 2 : a === "Writer" ? 3 : 4;
+const STAGE_OF = (a) => a === "Planner" ? "plan" : a.startsWith("SQL Worker") ? "workers" : a === "Verifier" ? "verify" : a === "Writer" ? "write" : null;
+
+function prettyResult(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 1); } catch { return String(text || ""); }
+}
+
+function traceCall(c) {
+  if (c.name === "note") return el("div", { class: "call note", text: c.summary || c.result });
+  const d = el("details", { class: "call" });
+  d.append(el("summary", {}, c.summary || c.name, el("span", { class: "tool", text: c.name })));
+  d.addEventListener("toggle", () => {
+    if (!d.open || d.dataset.filled) return;
+    d.dataset.filled = "1";
+    if (c.name === "run_sql" && c.args && c.args.query) d.append(el("div", { class: "label", text: "Query" }), el("pre", { text: c.args.query.trim() }));
+    else d.append(el("div", { class: "label", text: "Arguments" }), el("pre", { text: JSON.stringify(c.args || {}, null, 1) }));
+    d.append(el("div", { class: "label", text: "Result" }), el("pre", { text: prettyResult(c.result) }));
+  }, { once: false });
+  return d;
+}
+
+function trace(meta, toolCalls) {
+  const calls = toolCalls || [];
+  if (!calls.length) return null;
+  const agents = [...new Set(calls.map((c) => c.agent))].sort((a, b) => AGENT_ORDER(a) - AGENT_ORDER(b));
+  const queries = calls.filter((c) => c.name === "run_sql").length;
+  const det = el("details", { class: "trace" });
+  det.append(el("summary", {}, el("b", { text: "How this was answered" }),
+    el("span", { text: `${plural(agents.length, "agent")}, ${plural(calls.length, "step")}, ${plural(queries, "query", "queries")}` })));
+  const body = el("div", { class: "trace-body" });
+  const plan = meta && meta.plan;
+  if (plan && (plan.interpretation || (plan.sub_questions || []).length)) {
+    const box = el("div", { class: "trace-plan" });
+    if (plan.interpretation) box.append(el("div", { text: "Read as: " + plan.interpretation }));
+    if ((plan.sub_questions || []).length > 1) box.append(el("ol", {}, plan.sub_questions.map((q) => el("li", { text: q }))));
+    body.append(box);
+  }
+  const timings = (meta && meta.timings) || {};
+  for (const a of agents) {
+    const stage = STAGE_OF(a);
+    const secs = stage && timings[stage] !== undefined && !(stage === "workers" && workerIndex(a) > 1) ? `${timings[stage]} s` : "";
+    const g = el("div", { class: "trace-group" }, el("h4", {}, a, secs ? el("small", { text: secs }) : null));
+    calls.filter((c) => c.agent === a).forEach((c) => g.append(traceCall(c)));
+    body.append(g);
+  }
+  if (meta && meta.first_draft) {
+    const d = el("details", { class: "call note" }, el("summary", { text: "First draft, before the numbers check" }), el("pre", { text: meta.first_draft }));
+    body.append(d);
+  }
+  det.append(body);
+  return det;
+}
+
+// ---------------------------------------------------------------------------
+// Conversation
+// ---------------------------------------------------------------------------
+const conversation = $("#conversation");
+const input = $("#input");
+const send = $("#send");
+let sessionId = null;
+let busy = false;
+
+function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 144) + "px"; }
+function updateSend() {
+  send.disabled = busy || !input.value.trim();
+  const n = input.value.length;
+  $("#count").textContent = n > 1500 ? `${n.toLocaleString()} / 2,000` : "";
+}
+
+function enterChat() {
+  if (document.body.classList.contains("chatting")) return;
+  document.body.classList.add("chatting");
+  $("#new-btn").hidden = false;
+}
+
+function showAnswer(ex, data) {
+  const failed = !data || /^Model call failed:/.test(data.response || "");
+  ex.querySelector(".slot").replaceChildren();
+  const slot = ex.querySelector(".slot");
+  if (failed) {
+    const msg = (data && data.response) || "No answer came back.";
+    slot.append(el("div", { class: "answer error" },
+      el("p", { text: "This question couldn't be answered. " + msg.replace(/^Model call failed:\s*/, "The model call failed: ") }),
+      el("button", { class: "send retry", type: "button", text: "Try again", onclick: () => { ex.remove(); ask(ex.dataset.q); } })));
+    return;
+  }
+  const b = badges(data.meta, data.tool_calls);
+  if (b.length) slot.append(el("div", { class: "badges" }, b.map(([cls, t]) => el("span", { class: "badge " + cls, text: t }))));
+  const answer = el("div", { class: "answer" });
+  slot.append(answer);
+  renderMarkdown(answer, data.response || "", data.tool_calls);
+  const t = trace(data.meta, data.tool_calls);
+  if (t) slot.append(t);
+}
+
+async function streamAnswer(question, onEvent) {
+  const res = await fetch("/chat/stream", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: question, session_id: sessionId }),
+  });
+  if (!res.ok || !res.body) throw Object.assign(new Error(`stream unavailable (${res.status})`), { noEvents: true });
+  const reader = res.body.getReader(), decoder = new TextDecoder();
+  let buffer = "", done = null, any = false;
+  for (;;) {
+    const { value, done: end } = await reader.read();
+    if (end) break;
+    buffer += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buffer.indexOf("\n\n")) >= 0) {
+      const chunk = buffer.slice(0, i); buffer = buffer.slice(i + 2);
+      for (const line of chunk.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6)); any = true;
+        if (ev.type === "done") done = ev; else onEvent(ev);
+      }
+    }
+  }
+  if (!done) throw Object.assign(new Error("the connection closed before the answer arrived"), { noEvents: !any });
+  return done;
+}
+
+async function plainAnswer(question) {
+  const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: question, session_id: sessionId }) });
+  if (!res.ok) throw new Error(`the server answered ${res.status}`);
+  return res.json();
+}
+
+async function ask(question) {
+  question = (question || "").trim();
+  if (!question || busy) return;
+  busy = true; updateSend();
+  if (document.body.classList.contains("view-how")) showQuestions();
+  enterChat();
+
+  const ex = el("article", { class: "exchange" });
+  ex.dataset.q = question;
+  ex.append(el("h2", { class: "question", text: question }), el("div", { class: "slot" }));
+  conversation.append(ex);
+  const progress = new Progress(ex.querySelector(".slot"));
+  ex.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+
+  let data = null;
+  try {
+    data = await streamAnswer(question, (ev) => progress.handle(ev));
+  } catch (e) {
+    if (e.noEvents) {
+      // The stream never started (e.g. a proxy that blocks it): fall back to the plain endpoint.
+      progress.addLog("Page", "Live progress isn't available here; waiting for the full answer.", "note");
+      try { data = await plainAnswer(question); } catch (e2) { data = { response: "Model call failed: " + e2.message }; }
+    } else {
+      data = { response: "Model call failed: " + e.message };
+    }
+  }
+  progress.finish();
+  if (data && data.session_id) sessionId = data.session_id;
+  showAnswer(ex, data);
+  busy = false; updateSend();
+  input.focus();
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+$("#how-diagram").append(buildDiagram(3, true));
+$("#trace-diagram").append(buildDiagram(1, true, true));
+$("#lifecycle-diagram").append(buildLifecycle());
+$("#chips").append(...EXAMPLES.map((ex) => el("button", { class: "chip" + (ex.limit ? " limit" : ""), type: "button", onclick: () => ask(ex.q) },
+  el("span", { class: "topic", text: ex.topic }), el("span", { text: ex.q }))));
+
+// Colour key, from the same palette the chart code uses.
+const PALETTE = JSON.parse($("#palette").textContent);
+$("#color-keys").append(...[["Resource types", PALETTE.resource], ["Regions", PALETTE.region], ["Queue status", PALETTE.status]]
+  .map(([name, colors]) => el("div", {}, el("h3", { text: name }),
+    el("ul", {}, Object.entries(colors).filter(([k]) => k !== "Unknown")
+      .map(([k, c]) => el("li", {}, el("i", { class: "swatch", style: `background:${c}` }), k))))));
+
+// Two views on one page: questions (default) and "How it works" (#how-it-works, or #limits inside it).
+function route() {
+  const how = location.hash === "#how-it-works" || location.hash === "#limits";
+  document.body.classList.toggle("view-how", how);
+  const link = $("#how-link");
+  if (how) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  if (how) {
+    const target = location.hash === "#limits" ? $("#limits") : $("#how-it-works");
+    requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+  }
+}
+window.addEventListener("hashchange", route);
+const showQuestions = () => { if (location.hash) history.pushState(null, "", location.pathname); route(); };
+$("#home-link").addEventListener("click", (e) => { e.preventDefault(); showQuestions(); window.scrollTo({ top: 0 }); });
+$(".how .back").addEventListener("click", (e) => { e.preventDefault(); showQuestions(); window.scrollTo({ top: 0 }); });
+route();
+
+$("#composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = input.value; if (!q.trim() || busy) return;
+  input.value = ""; autosize(); ask(q);
+});
+input.addEventListener("input", () => { autosize(); updateSend(); });
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#composer").requestSubmit(); }
+});
+$("#new-btn").addEventListener("click", async () => {
+  if (busy) return;
+  if (sessionId) fetch("/clear?session_id=" + encodeURIComponent(sessionId), { method: "POST" }).catch(() => {});
+  sessionId = null;
+  conversation.replaceChildren();
+  document.body.classList.remove("chatting");
+  $("#new-btn").hidden = true;
+  showQuestions();
+  window.scrollTo({ top: 0 });
+  input.focus();
+});
+updateSend();
+input.focus();
+</script>
+</body>
 </html>

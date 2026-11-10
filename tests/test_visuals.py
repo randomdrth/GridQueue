@@ -205,3 +205,81 @@ def test_drop_unsupported_sentences_keeps_the_lead():
     assert "Dates are missing for some projects." in out and "Timing bias" in out
     assert out.startswith("PJM's median is 1,150 days")
     assert "**Gaps**" not in out
+
+
+
+# --- map metrics and tool summaries (frontend support) ------------------------------
+
+def test_map_offers_other_metrics():
+    sql = ("SELECT fips_code, county, state, existing_mw, active_queue_mw, active_queue_mw / existing_mw AS ratio "
+           "FROM county_summary WHERE existing_mw >= 50")
+    ctx = V.WriterContext(findings={1: finding(1, sql)})
+    V._map(ctx, 1, "ratio", "Queue vs existing", "Ratio")
+    v = ctx.visuals[0]
+    assert [m["column"] for m in v["metrics"]] == ["ratio", "existing_mw", "active_queue_mw"]
+    assert v["metrics"][0]["spec"] is v["spec"] and v["metrics"][0]["label"] == "Ratio"
+    assert v["metrics"][1]["spec"]["title"] == "Existing MW by county"
+    values = v["metrics"][2]["spec"]["layer"][1]["data"]["values"]
+    assert values and all(set(d) == {"fips", "value", "name"} for d in values)
+
+
+def test_map_with_one_metric_has_no_menu(ctx):
+    V._map(ctx, 2, "active_queue_mw", "Active queue", "MW")
+    assert ctx.visuals[0]["metrics"] == []
+
+
+def test_tool_summaries():
+    from gridqueue.recorder import summarize
+    assert summarize("run_sql", {"purpose": "active by region"}, '{"row_count": 7, "rows": []}') == "active by region (7 rows)"
+    assert summarize("run_sql", {"purpose": "x"}, '{"error": "Binder Error: no column y"}').startswith("Error: Binder")
+    assert summarize("submit_plan", {"plan": {"action": "answer", "sub_questions": [{}, {}]}}, "") == \
+        "Split the question into 2 parts"
+    assert summarize("submit_verification", {"verification": {"verdict": "ok"}}, "") == \
+        "Verified the findings: all checks passed"
+    assert summarize("show_map", {"title": "Queue"}, "ok: county map") == "Drew a county map: Queue"
+    assert summarize("show_chart", {"chart_type": "bar"}, "Error: too many").startswith("Could not draw a bar chart")
+
+
+def test_pretty_labels_keep_units():
+    assert V._pretty("existing_mw") == "Existing MW"
+    assert V._pretty("active_queue_mw") == "Active queue MW"
+    assert V._pretty("median_cost") == "Median cost"
+
+
+def test_small_map_values_are_not_si_prefixed():
+    color = V._map_color("Ratio", [{"value": v} for v in (0.2, 0.4, 0.9, 1.1, 2.5, 3.0, 8.0)])
+    assert color["legend"]["format"] == ",.3~g"   # 0.41, not "410m"
+    big = V._map_color("MW", [{"value": v} for v in (100, 2_000, 15_000, 40_000, 90_000, 200_000)])
+    assert big["legend"]["format"] == ",~s"
+
+
+# --- fixed colours ------------------------------------------------------------------
+
+def test_known_categories_get_fixed_colours():
+    s = V.semantic_scale(["Solar", "wind", "Battery"])
+    assert s == {"domain": ["Solar", "wind", "Battery"], "range": ["#D4A017", "#2A9D8F", "#7B5EA7"]}
+    assert V.semantic_scale(["PJM", "ERCOT"])["range"] == ["#1C5D99", "#B3392F"]
+    assert V.semantic_scale(["withdrawn", "operational"])["range"] == ["#A3AEB9", "#1C5D99"]
+    assert V.semantic_scale(["PJM", "Solar"]) is None          # mixed: fall back to the default palette
+    assert V.semantic_scale(["Operational projects %"]) is None
+
+
+def test_single_series_bars_colour_each_resource():
+    spec = V.bar_spec("t", "Type", "MW", [{"category": c, "value": 1, "series": ""} for c in ("Solar", "Gas")], multi=False)
+    assert spec["encoding"]["color"]["scale"]["range"] == ["#D4A017", "#8D6E63"]
+    assert spec["encoding"]["color"]["legend"] is None
+    plain = V.bar_spec("t", "County", "MW", [{"category": c, "value": 1, "series": ""} for c in ("Crook", "Nye")], multi=False)
+    assert "color" not in plain["encoding"]
+
+
+def test_line_series_use_region_colours():
+    data = [{"x": y, "value": 1, "series": r} for y in (2020, 2021) for r in ("ERCOT", "PJM")]
+    assert V.line_spec("t", "Year", "Days", data, multi=True)["encoding"]["color"]["scale"]["range"] == ["#B3392F", "#1C5D99"]
+
+
+def test_page_palette_matches_charts():
+    import json, re
+    from pathlib import Path
+    html = Path(__file__).parent.parent.joinpath("index.html").read_text()
+    page = json.loads(re.search(r'<script id="palette" type="application/json">(.*?)</script>', html, re.S).group(1))
+    assert page == {"resource": V.RESOURCE_COLORS, "region": V.REGION_COLORS, "status": V.STATUS_COLORS}

@@ -17,6 +17,7 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 from agents import Agent, ItemHelpers, MaxTurnsExceeded, MessageOutputItem, ModelSettings, RunErrorHandlerInput, RunErrorHandlerResult, Runner
 from pydantic import BaseModel, ValidationError
@@ -276,9 +277,11 @@ async def _run_workers(team, sub_questions: list[SubQuestion], message: str, pla
 
 
 async def run_pipeline(message: str, history: list[dict] | None = None,
-                       team: dict[str, Agent] | None = None) -> PipelineResult:
+                       team: dict[str, Agent] | None = None,
+                       on_event: Callable[[dict], None] | None = None) -> PipelineResult:
+    """Answer one message. on_event, if given, receives progress events as they happen."""
     team = team or default_team()
-    rec = Recorder()
+    rec = Recorder(on_event)
     start = time.monotonic()
     timings: dict[str, float] = {}
 
@@ -290,6 +293,7 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
 
     # 1. Plan
     t0 = time.monotonic()
+    rec.stage("plan", "start")
     try:
         r = await asyncio.wait_for(
             Runner.run(team["planner"], (history or []) + [{"role": "user", "content": message}],
@@ -301,9 +305,12 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
         plan = _fallback_plan(message, "planning did not finish")
     plan = _clean_plan(plan, message)
     mark("plan", t0)
+    plan_view = {"action": plan.action, "interpretation": plan.interpretation,
+                 "sub_questions": [sq.question for sq in plan.sub_questions] if plan.action == "answer" else []}
+    rec.stage("plan", "done", **plan_view)
 
     meta = {"action": plan.action, "complexity": plan.complexity, "sub_questions": len(plan.sub_questions),
-            "verdict": None, "follow_ups": 0}
+            "verdict": None, "follow_ups": 0, "plan": plan_view}
 
     def done(response: str) -> PipelineResult:
         meta.update(seconds=round(time.monotonic() - start, 1), timings=timings, tokens=rec.token_summary())
@@ -320,15 +327,18 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
     if plan.action == "answer":
         # 3. Workers, in parallel.
         t0 = time.monotonic()
+        rec.stage("workers", "start", count=len(plan.sub_questions))
         findings = await _run_workers(team, plan.sub_questions, message, plan, rec,
                                       budget_s=remaining() - PRESENTER_RESERVE_S - VERIFIER_RESERVE_S)
         mark("workers", t0)
+        rec.stage("workers", "done", answered=sum(f.answered for f in findings), count=len(findings))
 
         # 4. Verify (and at most one follow-up round).
         if SKIP_VERIFIER_FOR_SIMPLE and plan.complexity == "simple":
             rec.note("Verifier", "Skipped for a simple question (SKIP_VERIFIER_FOR_SIMPLE is on).")
         else:
             t0 = time.monotonic()
+            rec.stage("verify", "start")
             try:
                 r = await asyncio.wait_for(
                     Runner.run(team["verifier"], _verifier_input(message, plan, findings, rec),
@@ -340,6 +350,8 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
                 rec.note("Verifier", f"Verification did not finish ({type(e).__name__}); findings go unverified.")
             mark("verify", t0)
             meta["verdict"] = verification.verdict if verification else "skipped"
+            rec.stage("verify", "done", verdict=meta["verdict"],
+                      issues=len(verification.issues) if verification else 0)
 
             follow_ups = (verification.follow_up_questions[:MAX_FOLLOW_UPS]
                           if verification and verification.verdict == "needs_more" else [])
@@ -350,8 +362,11 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
                     sq.id = next_id + i
                 plan.sub_questions += follow_ups
                 t0 = time.monotonic()
+                rec.stage("follow_ups", "start", count=len(follow_ups),
+                          sub_questions=[sq.question for sq in follow_ups])
                 extra = await _run_workers(team, follow_ups, message, plan, rec, budget_s=budget)
                 mark("follow_ups", t0)
+                rec.stage("follow_ups", "done", answered=sum(f.answered for f in extra))
                 findings += extra
                 unverified = {f.sub_question_id for f in extra}
                 meta["follow_ups"] = len(extra)
@@ -360,6 +375,7 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
 
     # 5. Write. The Writer picks tables/charts/maps; code builds them from the findings' verified SQL.
     t0 = time.monotonic()
+    rec.stage("write", "start")
     ctx = visuals.WriterContext(findings={f.sub_question_id: f for f in findings if f.answered})
     presenter_input = _presenter_input(message, plan, findings, verification, unverified)
     try:
@@ -373,6 +389,7 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
         rec.note("Writer", f"Writing did not finish ({type(e).__name__}); returning the findings directly.")
         response = ""
     mark("write", t0)
+    rec.stage("write", "done")
 
     # 6. Numbers check: every number in the prose must appear in the evidence. One revision if not.
     if response and findings:
@@ -381,6 +398,7 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
         if bad and remaining() > REVISION_MIN_S:
             rec.note("Writer", f"Numbers not found in the evidence: {', '.join(bad)}. Asked for one revision.")
             t0 = time.monotonic()
+            rec.stage("revise", "start", numbers=bad)
             feedback = (f"These numbers in your answer do not appear in the findings or query results: "
                         f"{', '.join(bad)}. Replace each with the exact number from the findings, or remove it. "
                         "Do not compute new numbers (ratios, ranges, sums, differences). Keep every "
@@ -405,6 +423,7 @@ async def run_pipeline(message: str, history: list[dict] | None = None,
             except Exception as e:  # noqa: BLE001 -- a failed revision must never sink the answer
                 rec.note("Writer", f"Revision did not finish ({type(e).__name__}); kept the first draft.")
             mark("revise", t0)
+            rec.stage("revise", "done")
             still = meta["unsupported_numbers"]["final"]
             if still:
                 # Smoke run 7: the revision swapped "23%" for "143 projects", another computed number.

@@ -32,6 +32,8 @@ MAX_BAR_CATEGORIES = 40
 MAX_LINE_POINTS = 600
 MAX_SCATTER_POINTS = 3_000
 MAX_SERIES = 6
+MAX_MAP_METRICS = 3          # the chosen column plus up to 2 others the page can switch to
+_NOT_A_METRIC = re.compile(r"fips|year|lat|lon|(^|_)id$", re.IGNORECASE)
 
 
 @dataclass
@@ -143,8 +145,17 @@ def render_markdown_table(labels: list[str], rows: list[list], percent_cols: set
     return "\n".join([head, sep, *body])
 
 
+_UNITS = {"mw": "MW", "gw": "GW", "kw": "kW", "mwh": "MWh", "pct": "%", "usd": "$", "poi": "POI", "cod": "COD",
+          "ia": "IA", "ir": "IR", "eia": "EIA", "id": "ID", "fips": "FIPS"}
+
+
 def _pretty(name: str) -> str:
-    return re.sub(r"_+", " ", name).strip().capitalize()
+    """A column name as a readable label: existing_mw -> 'Existing MW', share_built_pct -> 'Share built %'."""
+    words = [w for w in re.split(r"_+", name.strip()) if w]
+    out = [_UNITS.get(w.lower(), w.lower()) for w in words]
+    if out and out[0] == out[0].lower():
+        out[0] = out[0].capitalize()
+    return " ".join(out)
 
 
 def _base(title: str, data: list[dict], height: int = 320) -> dict:
@@ -158,6 +169,48 @@ def _base(title: str, data: list[dict], height: int = 320) -> dict:
 
 def _value_format(percent: bool) -> dict:
     return {"axis": {"format": ".0%"}} if percent else {}
+
+
+# Fixed colours, so a reader learns them once: solar is gold in every chart, PJM is always the same
+# blue, withdrawn is always grey. Hybrids are a lighter tint of their base resource. The page's
+# "How it works" view shows the same palette (tests check they match).
+RESOURCE_COLORS = {
+    "Solar": "#D4A017", "Solar+Battery": "#E9C46A",
+    "Wind": "#2A9D8F", "Wind+Battery": "#76C7BA",
+    "Offshore Wind": "#176D78", "Offshore Wind+Battery": "#5EA8B0",
+    "Battery": "#7B5EA7", "Pumped Storage": "#6E9FD4",
+    "Gas": "#8D6E63", "Gas+Battery": "#BCAAA4",
+    "Coal": "#3F3F46", "Oil": "#5B4636", "Nuclear": "#B83280",
+    "Hydro": "#2F6FB0", "Geothermal": "#B4532A", "Biomass": "#5E8C31",
+    "Other": "#94A3B8", "Other Hybrid": "#CBD5E1",
+}
+REGION_COLORS = {
+    "PJM": "#1C5D99", "MISO": "#2E7D4F", "ERCOT": "#B3392F", "CAISO": "#D9730D", "SPP": "#7B5EA7",
+    "NYISO": "#0F8B8D", "ISO-NE": "#A0522D", "West": "#C9A227", "Southeast": "#5D7385",
+}
+STATUS_COLORS = {
+    "Active": "#D9730D", "Operational": "#1C5D99", "Withdrawn": "#A3AEB9", "Suspended": "#C9A227",
+    "Unknown": "#CBD5E1",
+}
+_PALETTES = [RESOURCE_COLORS, REGION_COLORS, STATUS_COLORS]
+
+
+def semantic_scale(values) -> dict | None:
+    """A fixed colour scale if every value is a known resource type, region or status, else None."""
+    vals = [v for v in dict.fromkeys(values) if v is not None and str(v).strip()]
+    if not vals:
+        return None
+    for palette in _PALETTES:
+        lookup = {k.lower(): c for k, c in palette.items()}
+        if all(str(v).strip().lower() in lookup for v in vals):
+            return {"domain": vals, "range": [lookup[str(v).strip().lower()] for v in vals]}
+    return None
+
+
+def _series_color(data: list[dict]) -> dict:
+    enc = {"field": "series", "type": "nominal", "title": None}
+    scale = semantic_scale(d["series"] for d in data)
+    return {**enc, "scale": scale} if scale else enc
 
 
 def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bool, percent: bool = False) -> dict:
@@ -174,10 +227,14 @@ def bar_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: bo
     spec = _base(title, data, height=max(240, 22 * len(categories)) if horizontal else 320)
     if multi:
         enc["yOffset" if horizontal else "xOffset"] = {"field": "series"}
-        enc["color"] = {"field": "series", "type": "nominal", "title": None}
+        enc["color"] = _series_color(data)
         enc["opacity"] = {"condition": {"param": "pick", "value": 1}, "value": 0.25}
         tooltip.insert(1, {"field": "series", "title": "Series"})
         spec["params"] = [{"name": "pick", "select": {"type": "point", "fields": ["series"]}, "bind": "legend"}]
+    else:
+        scale = semantic_scale(categories)  # e.g. one bar per resource type: each in its own colour
+        if scale:
+            enc["color"] = {"field": "category", "type": "nominal", "scale": scale, "legend": None}
     enc["tooltip"] = tooltip
     spec.update(mark={"type": "bar", "cornerRadiusEnd": 2}, encoding=enc)
     return spec
@@ -193,7 +250,7 @@ def line_spec(title: str, x_label: str, y_label: str, data: list[dict], multi: b
                        {"field": "value", "title": y_label, "format": ".1%" if percent else ",.4~f"}]}
     params = [{"name": "zoom", "select": "interval", "bind": "scales"}]
     if multi:
-        enc["color"] = {"field": "series", "type": "nominal", "title": None}
+        enc["color"] = _series_color(data)
         enc["opacity"] = {"condition": {"param": "pick", "value": 1}, "value": 0.2}
         enc["tooltip"].insert(1, {"field": "series", "title": "Series"})
         params.append({"name": "pick", "select": {"type": "point", "fields": ["series"]}, "bind": "legend"})
@@ -210,7 +267,7 @@ def scatter_spec(title: str, x_label: str, y_label: str, data: list[dict], multi
            "y": {"field": "value", "type": "quantitative", "title": y_label, "scale": {"zero": False}},
            "tooltip": tooltip}
     if multi:
-        enc["color"] = {"field": "series", "type": "nominal", "title": None}
+        enc["color"] = _series_color(data)
         enc["tooltip"].insert(0, {"field": "series", "title": "Series"})
     spec = _base(title, data)
     spec.update(params=[{"name": "zoom", "select": "interval", "bind": "scales"}],
@@ -267,7 +324,8 @@ def _map_color(value_label: str, data: list[dict]) -> dict:
     return {"field": "value", "type": "quantitative", "title": value_label,
             "scale": {"type": "threshold", "domain": breaks,
                       "scheme": {"name": "oranges", "count": len(breaks) + 1}},
-            "legend": {"format": ",~s"}}
+            "legend": {"format": ",~s" if max(breaks) >= 10_000 else ",.3~g",
+                       "orient": "bottom", "direction": "horizontal"}}
 
 
 # ---------------------------------------------------------------------------
@@ -358,19 +416,37 @@ def _map(ctx: WriterContext, finding_id: int, value_column: str, title: str, val
         raise ValueError(f"A county map needs a fips_code column; finding {finding_id}'s query has {cols}. "
                          "Skip the map.") from None
     vi = _col(cols, value_column)
+    if not any(_is_number(r[vi]) for r in rows):
+        raise ValueError(f"'{cols[vi]}' is not numeric, so it can't colour a map.")
     ci = next((i for i, c in enumerate(cols) if c.lower() == "county"), None)
     si = next((i for i, c in enumerate(cols) if c.lower() == "state"), None)
-    data = []
-    for r in rows:
-        if r[fi] is None or not _is_number(r[vi]):
-            continue
-        fips = str(r[fi]).split(".")[0].zfill(5)
-        name = ", ".join(str(r[i]) for i in (ci, si) if i is not None and r[i]) or fips
-        data.append({"fips": fips, "value": r[vi], "name": name})
+
+    def county_data(col: int) -> list[dict]:
+        out = []
+        for r in rows:
+            if r[fi] is None or not _is_number(r[col]):
+                continue
+            fips = str(r[fi]).split(".")[0].zfill(5)
+            name = ", ".join(str(r[i]) for i in (ci, si) if i is not None and r[i]) or fips
+            out.append({"fips": fips, "value": r[col], "name": name})
+        return out
+
+    data = county_data(vi)
     if not data:
         raise ValueError(f"No rows with both a fips_code and a numeric {value_column}.")
-    marker = ctx.add("map", title=title, finding_id=finding_id, sql=f.final_sql,
-                     spec=map_spec(title, value_label, data), counties=len(data))
+
+    # Other numeric columns the page can switch the colouring to (e.g. ratio -> active MW -> existing MW).
+    # Each gets its own spec because the colour breaks are computed per metric.
+    others = [i for i, c in enumerate(cols)
+              if i not in (vi, fi) and not _NOT_A_METRIC.search(c)
+              and any(_is_number(r[i]) for r in rows) and all(r[i] is None or _is_number(r[i]) for r in rows)]
+    metrics = [{"column": cols[vi], "label": value_label, "spec": map_spec(title, value_label, data)}]
+    for i in others[:MAX_MAP_METRICS - 1]:
+        label = _pretty(cols[i])
+        metrics.append({"column": cols[i], "label": label,
+                        "spec": map_spec(f"{label} by county", label, county_data(i))})
+    marker = ctx.add("map", title=title, finding_id=finding_id, sql=f.final_sql, spec=metrics[0]["spec"],
+                     metrics=metrics if len(metrics) > 1 else [], counties=len(data))
     return f"ok: county map of {len(data)} counties. Put {marker} on its own line where it belongs."
 
 
@@ -460,7 +536,8 @@ def place_visuals(text: str, ctx: WriterContext) -> str:
     text = _MARKER.sub(lambda m: "\n\n" + block(by_marker[m.group(0)]) + "\n\n" if m.group(0) in by_marker else "", text)
     if missing:
         extra = "\n\n".join(block(v) for v in missing)
-        anchor = text.find("**How I got this**")
+        m = re.search(r"^(?:\*\*|#+\s*)How I got this", text, re.MULTILINE)
+        anchor = m.start() if m else -1
         text = (text[:anchor] + extra + "\n\n" + text[anchor:]) if anchor >= 0 else (text + "\n\n" + extra)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 

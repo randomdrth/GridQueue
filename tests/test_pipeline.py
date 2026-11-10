@@ -292,3 +292,35 @@ def test_drop_restart_keeps_the_last_full_answer():
     full = "Historically, PJM has connected projects faster than ERCOT, with a median of 1,150 days. More."
     assert _drop_restart(full[:85] + "\n**Data Anomalies:**\n" + full) == full
     assert _drop_restart(full) == full
+
+
+
+def test_progress_events_follow_the_pipeline():
+    events = []
+    asyncio.run(pipeline.run_pipeline("How many active projects are in PJM and MISO?", team=team(lambda t, i: plan_step()),
+                                      on_event=events.append))
+    stages = [(e["stage"], e["status"]) for e in events if e["type"] == "stage"]
+    assert stages == [("plan", "start"), ("plan", "done"), ("workers", "start"), ("workers", "done"),
+                      ("verify", "start"), ("verify", "done"), ("write", "start"), ("write", "done")]
+    plan_done = next(e for e in events if e.get("stage") == "plan" and e["status"] == "done")
+    assert plan_done["sub_questions"] == [SUBQ[1][0], SUBQ[2][0]]
+    assert next(e for e in events if e.get("stage") == "verify" and e["status"] == "done")["verdict"] == "ok"
+    tools = [e for e in events if e["type"] == "tool"]
+    assert {"SQL Worker 1", "SQL Worker 2", "Verifier", "Writer"} <= {e["agent"] for e in tools}
+    assert all("result" not in e and e["summary"] for e in tools)   # progress is light; results come at the end
+    assert any(e["type"] == "agent" and e["agent"] == "Planner" for e in events)
+
+
+def test_a_broken_listener_does_not_stop_the_pipeline():
+    def explode(event):
+        raise RuntimeError("connection closed")
+
+    r = asyncio.run(pipeline.run_pipeline("How many active projects are in PJM and MISO?",
+                                          team=team(lambda t, i: plan_step()), on_event=explode))
+    assert r.response.startswith("PJM has 1,134 active projects")
+
+
+def test_meta_carries_the_plan():
+    r = run(team(lambda t, i: plan_step()))
+    assert r.meta["plan"]["sub_questions"] == [SUBQ[1][0], SUBQ[2][0]]
+    assert all(c.get("summary") for c in r.tool_calls)
