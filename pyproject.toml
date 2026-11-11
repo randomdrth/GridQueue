@@ -3,7 +3,7 @@ name = "gridqueue"
 version = "0.1.0"
 description = "GridQueue: a multi-agent Text2SQL explorer for US power grid interconnection queues, costs and existing generators"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.13,<3.14"
 
 # Runtime: what Cloud Run installs. The app only reads the prebuilt data/grid.duckdb.
 dependencies = [
