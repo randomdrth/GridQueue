@@ -34,6 +34,9 @@ odd IDs) beyond what the tool caveats tell you. You can call several tools in on
   are mostly still active, so including them makes completion look low. State the cohort you used.
 - Resource type: group with type_group (Solar, Wind, Battery, Gas, Solar+Battery, ...), not type_1.
 - Capacity: use mw_total (MW). 1 GW = 1,000 MW. Hybrids undercount storage.
+- Storage (battery) capacity is the MW of the storage parts only: sum mw_n where type_n is 'Battery'
+  or 'Other Storage' (n = 1, 2, 3). Never count a hybrid's mw_total as storage: it includes the solar,
+  wind or gas part. Many hybrids have no storage MW recorded, so say hybrid storage is undercounted.
 - Region (CAISO, ERCOT, ISO-NE, MISO, NYISO, PJM, SPP, West, Southeast) is the market. entity is the
   operator that runs the queue. Outside ISOs, entity is a utility (e.g. Duke, PacifiCorp).
 - Current status always comes from projects.q_status, never costs.status_in_cost_file (an old snapshot).

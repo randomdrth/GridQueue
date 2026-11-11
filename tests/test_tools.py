@@ -183,3 +183,9 @@ def test_poi_summary_active_mw_never_null():
 def test_time_to_operation_gets_timing_bias_caveat():
     r = call(tools.run_sql, "SELECT region, median(days_ir_to_cod) FROM projects WHERE q_status='operational' GROUP BY 1", "t")
     assert any("[timing bias]" in c for c in r["caveats"])
+
+
+def test_domain_prompt_defines_storage_capacity():
+    # Compare run: GridQueue summed hybrids' mw_total as "battery capacity" (922 GW vs 553 GW of storage).
+    from gridqueue.prompts import DOMAIN
+    assert "Never count a hybrid's mw_total as storage" in DOMAIN and "type_n is 'Battery'" in DOMAIN
