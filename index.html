@@ -116,6 +116,9 @@ body.chatting .intro { display: none; }
 .chip:hover { border-color: var(--conductor); }
 .chip .topic { font: 600 0.88rem/1 var(--display); color: var(--conductor); }
 .chip.limit .topic { color: var(--ink-3); }
+.own { margin-top: 1.25rem; max-width: var(--measure); }
+.own h3 { font-size: 1.02rem; margin: 0 0 0.2rem; }
+.own p { font-size: 0.9rem; color: var(--ink-2); margin: 0; }
 .try p.limits { font-size: 0.86rem; color: var(--ink-3); margin: 1.1rem 0 0; }
 
 /* ---------- how it works ---------- */
@@ -312,6 +315,10 @@ textarea::placeholder { color: var(--ink-3); }
       <h2>Try a question</h2>
       <p>Answers take 30 seconds to 2 minutes. Follow up in plain words, like "now just Texas", or click a bar or county to ask about it.</p>
       <div class="chips" id="chips"></div>
+      <div class="own">
+        <h3>Writing your own</h3>
+        <p>Say what to measure (requests, MW, $/kW or days), how to split it (by region, state, county, resource type or year) and any filter (active, built, withdrawn, a year range). For example: "Median days to operation for solar projects in PJM, by year since 2015."</p>
+      </div>
       <p class="limits">It can't answer questions about electricity demand, including data centers, interconnection costs in CAISO or ERCOT, or final costs. <a href="#limits">Why</a></p>
     </div>
   </section>
